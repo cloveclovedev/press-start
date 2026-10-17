@@ -1,0 +1,16 @@
+@startuml overview
+title Wake-up run
+skinparam shadowing false
+
+[*] --> Waiting
+Waiting : wake time = earlier of\n(first event - lead time, alarm setting)
+Waiting --> Ringing : wake time
+Ringing --> Briefing : ringing length elapsed
+Briefing --> Interval : briefing done
+Interval --> Ringing : still in bed after interval\n(louder, up to the limit)
+Ringing --> OutOfBed : out of bed
+Briefing --> OutOfBed : out of bed
+Interval --> OutOfBed : out of bed
+OutOfBed --> Ringing : back in bed within the set time
+OutOfBed --> [*] : set time elapsed
+@enduml

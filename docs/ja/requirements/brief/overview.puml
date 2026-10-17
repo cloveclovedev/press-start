@@ -1,0 +1,19 @@
+@startuml overview
+title How a script is prepared
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+[Calendar events] as events
+[LLM (Claude API)] as llm
+[Template script] as template
+[Prepared scripts\n(one per escalation round)] as scripts
+[Speech engine (VOICEVOX)] as tts
+[Speaker] as speaker
+
+events --> llm : before wake time
+events --> template : when the LLM fails
+llm --> scripts
+template --> scripts
+scripts --> tts : at briefing
+tts --> speaker
+@enduml

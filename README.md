@@ -9,6 +9,6 @@ of bed.
 The project is at the requirements stage; there is no code yet.
 
 The documents are in Japanese. Start at
-[docs/ja/requirements/index.md](docs/ja/requirements/index.md). They follow the
+[docs/ja/index.md](docs/ja/index.md). They follow the
 format of [cumin-trace](https://github.com/cloveclovedev/cumin-trace), and
 `cumin-trace check` runs on every pull request.

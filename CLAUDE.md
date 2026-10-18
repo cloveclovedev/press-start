@@ -12,9 +12,8 @@ setup) lives in a separate private repository, not here.
 
 ## Read first
 
-All documents are in Japanese under `docs/ja/`. Start at
-`docs/ja/requirements/index.md` and read every document that your task touches
-before you change code.
+All documents are in Japanese under `docs/ja/`. Start at `docs/ja/index.md`
+and read every document that your task touches before you change code.
 
 - `docs/ja/requirements/overview.md` holds the goal, scope, and phases.
 - Each area (`alarm/`, `brief/`, `bed/`) has its requirements page.

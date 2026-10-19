@@ -7,8 +7,11 @@ Withings Sleep reports that the user is out of bed. A small relay on
 Cloudflare Workers receives the Withings notifications, and the home service
 fetches them outbound.
 
-Deployment to the home server (compose or systemd units, secrets, host audio
-setup) lives in a separate private repository, not here.
+This repository holds the image and the Compose project. Every value that
+belongs to the home server is a variable of the Compose project: device names,
+group IDs, the systemd slice (`cgroup_parent`), and the paths of the settings
+file and the secrets. A separate private repository sets those values and
+holds the host setup (systemd units, secrets, host audio setup).
 
 ## Read first
 

@@ -10,8 +10,8 @@ skinparam componentStyle rectangle
 [Speech engine (VOICEVOX)] as tts
 [Speaker] as speaker
 
-events --> llm : while the alarm sound plays
-events --> template : when the LLM does not answer\nbefore the alarm sound ends
+events --> llm : before the briefing of this round
+events --> template : when the LLM does not answer\nbefore the briefing starts
 llm --> script
 template --> script
 script --> tts : after the alarm sound

@@ -5,11 +5,11 @@ skinparam shadowing false
 [*] --> Waiting
 Waiting : wake time = earlier of\n(first event - lead time, alarm setting)
 Waiting --> Ringing : wake time
-Ringing --> Briefing : alarm sound length elapsed,\nor judged awake in the first round
+Ringing --> Briefing : alarm sound length elapsed,\nor judged awake
+Briefing : always read to the end
 Briefing --> Interval : briefing done, judged asleep
+Briefing --> Watching : briefing done, judged awake
 Interval --> Ringing : judged asleep after interval\n(louder, up to the limit)
-Briefing --> Watching : judged awake\n(the first briefing is read to the end)
-Ringing --> Watching : judged awake in a snooze round
 Interval --> Watching : judged awake
 Watching : back-to-bed window (default 30 min)
 Watching --> Ringing : judged asleep\n(louder than before)

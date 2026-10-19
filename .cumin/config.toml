@@ -1,0 +1,39 @@
+# cumin settings for this repository.
+#
+# cumin and the cumin-protected-paths check read this file from the default
+# branch only. A change to this file takes effect after a Maintainer merges it.
+# The check reads the list when it runs. A pull request whose check passed
+# before the merge is not checked again until it gets a new commit.
+
+# Paths that agents must not change. The cumin-protected-paths check fails when
+# a pull request from a bot (a GitHub App) adds, changes, renames, or removes a
+# matching file. This list replaces the default list. It does not add to it.
+#
+# The matching rules are a subset of the .gitignore rules:
+# - An entry with no "/" other than a trailing "/" matches at any depth.
+#   "CLAUDE.md" also matches "sub/CLAUDE.md".
+# - An entry with a leading "/" or an inner "/" matches only at that position
+#   from the top of the repository: "/docs/requirements/".
+# - An entry with a trailing "/" is a directory. It matches everything below
+#   that directory.
+# - Wildcards do not work.
+# - Upper case and lower case are the same. "claude.md" matches "CLAUDE.md".
+protected_paths = [
+  ".cumin/",
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".claude/",
+  # The requirement documents and the areas that cumin-trace allows for them.
+  # Only the Maintainer writes requirements.
+  "/docs/ja/requirements/",
+  "/.cumin-trace.toml",
+]
+
+# Labels that order the work, highest priority first. cumin starts a ready
+# issue with a higher label before one with a lower label, and an issue with
+# no such label last. A sub-issue without one takes the label of its
+# requirement issue. Without this key, the labels are cumin/priority/P0 to
+# cumin/priority/P3, and cumin creates them. Name the labels that the
+# organization already uses; cumin never creates or changes those, and
+# scripts/setup-repo.sh asks before it creates the missing ones.
+# priority_labels = ["priority/P0", "priority/P1", "priority/P2", "priority/P3"]

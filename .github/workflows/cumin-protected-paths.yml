@@ -1,0 +1,193 @@
+# Installed by scripts/setup-repo.sh of cumin-works as
+# .github/workflows/cumin-protected-paths.yml.
+#
+# The job fails when a pull request from a bot changes a protected path. It
+# runs for every bot author (a GitHub App is a bot), and it is skipped when a
+# person is the author. The condition names no App: a wrong name would skip the
+# job, and a skipped job passes the required check.
+#
+# The list of protected paths comes from .cumin/config.toml on the default
+# branch, never from the pull request. The job reads everything through the
+# GitHub API. It does not check out or run code from the pull request.
+#
+# The job reads the list when it runs. A change of the list on the default
+# branch does not run the job again for a pull request that is already open.
+#
+# Keep the pull_request trigger free of branch and path filters. A workflow
+# that GitHub skips leaves a required check pending. A job that an `if`
+# condition skips reports success.
+name: cumin-protected-paths
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  cumin-protected-paths:
+    # The ruleset requires a check with this name. Do not rename it.
+    name: cumin-protected-paths
+    if: github.event.pull_request.user.type == 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare the changed files with the protected paths
+        shell: python3 {0}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PULL_NUMBER: ${{ github.event.pull_request.number }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          import json
+          import os
+          import sys
+          import tomllib
+          import unicodedata
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          CONFIG_PATH = ".cumin/config.toml"
+          DEFAULT_ENTRIES = [".cumin/", "CLAUDE.md", "AGENTS.md", ".claude/"]
+          # The list API returns 3000 files at most.
+          MAX_LISTED_FILES = 3000
+
+
+          class ConfigError(Exception):
+              pass
+
+
+          def fold(text):
+              # The Host file system (macOS) ignores case and Unicode form.
+              return unicodedata.normalize("NFC", text).casefold()
+
+
+          def parse_entry(entry):
+              """Return (parts, directory_only, anchored) for one entry."""
+              if not isinstance(entry, str):
+                  raise ConfigError(f"protected_paths: {entry!r} is not a string")
+              if entry.startswith("!") or any(c in entry for c in "*?[\\"):
+                  raise ConfigError(f"protected_paths: {entry!r} uses a wildcard, '!' or '\\'")
+              directory_only = entry.endswith("/")
+              core = entry[:-1] if directory_only else entry
+              anchored = "/" in core
+              if core.startswith("/"):
+                  core = core[1:]
+              parts = core.split("/")
+              if any(part in ("", ".", "..") for part in parts):
+                  raise ConfigError(f"protected_paths: {entry!r} is not a valid path")
+              return [fold(part) for part in parts], directory_only, anchored
+
+
+          def entry_matches(entry, path):
+              """Apply the matching rules in docs/ja/requirements/cumin-core.md."""
+              parts, directory_only, anchored = parse_entry(entry)
+              path_parts = [fold(part) for part in path.split("/")]
+              if anchored:
+                  if path_parts[: len(parts)] != parts:
+                      return False
+                  return len(path_parts) > len(parts) or not directory_only
+              # A name without an inner "/" matches at any depth. A directory
+              # entry never matches the last part, because that part is a file.
+              candidates = path_parts[:-1] if directory_only else path_parts
+              return parts[0] in candidates
+
+
+          def load_entries(config_text):
+              """Return the entries. None means that the file does not exist."""
+              if config_text is None:
+                  return list(DEFAULT_ENTRIES)
+              try:
+                  config = tomllib.loads(config_text)
+              except tomllib.TOMLDecodeError as err:
+                  raise ConfigError(f"{CONFIG_PATH} is not valid TOML: {err}") from err
+              if "protected_paths" not in config:
+                  return list(DEFAULT_ENTRIES)
+              entries = config["protected_paths"]
+              if not isinstance(entries, list):
+                  raise ConfigError("protected_paths must be an array of strings")
+              for entry in entries:
+                  parse_entry(entry)
+              return entries
+
+
+          def changed_paths(file):
+              """Return every path that one changed file touches."""
+              paths = [file["filename"]]
+              if file.get("previous_filename"):
+                  paths.append(file["previous_filename"])
+              return paths
+
+
+          def find_violations(entries, files):
+              violations = []
+              for file in files:
+                  for path in changed_paths(file):
+                      for entry in entries:
+                          if entry_matches(entry, path):
+                              violations.append((path, file.get("status", ""), entry))
+                              break
+              return violations
+
+
+          def api_get(url, accept):
+              request = urllib.request.Request(url)
+              request.add_header("Accept", accept)
+              request.add_header("Authorization", "Bearer " + os.environ["GITHUB_TOKEN"])
+              request.add_header("X-GitHub-Api-Version", "2022-11-28")
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return response.read().decode("utf-8")
+
+
+          def read_config():
+              base = f"{os.environ['API_URL']}/repos/{os.environ['REPOSITORY']}"
+              ref = urllib.parse.quote(os.environ["DEFAULT_BRANCH"], safe="")
+              try:
+                  return api_get(f"{base}/contents/{CONFIG_PATH}?ref={ref}", "application/vnd.github.raw+json")
+              except urllib.error.HTTPError as err:
+                  if err.code == 404:
+                      return None
+                  raise
+
+
+          def read_files():
+              base = f"{os.environ['API_URL']}/repos/{os.environ['REPOSITORY']}"
+              files = []
+              page = 1
+              while True:
+                  url = f"{base}/pulls/{os.environ['PULL_NUMBER']}/files?per_page=100&page={page}"
+                  batch = json.loads(api_get(url, "application/vnd.github+json"))
+                  files.extend(batch)
+                  if len(batch) < 100:
+                      return files
+                  page += 1
+
+
+          def main():
+              try:
+                  entries = load_entries(read_config())
+              except ConfigError as err:
+                  print(f"::error::{err}")
+                  return 1
+              files = read_files()
+              expected = int(os.environ["CHANGED_FILES"])
+              if len(files) >= MAX_LISTED_FILES or len(files) != expected:
+                  print(f"::error::The API listed {len(files)} of {expected} changed files. The check cannot see every file.")
+                  return 1
+              violations = find_violations(entries, files)
+              for path, status, entry in violations:
+                  print(f"::error::{path} ({status}) matches the protected path {entry!r}")
+              if violations:
+                  print("Agents must not change protected paths. The list is in .cumin/config.toml on the default branch.")
+                  return 1
+              print(f"Checked {len(files)} changed files against {len(entries)} protected paths. No match.")
+              return 0
+
+
+          if __name__ == "__main__":
+              sys.exit(main())

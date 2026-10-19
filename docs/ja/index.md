@@ -10,7 +10,7 @@ press-start は、1人のための朝のアラームである。Google カレン
 
 1. [要求仕様書](requirements/overview.md): 何を解決したいか、どこまでやるか、どの順に作るか
 2. [用語集](requirements/glossary.md): 文書の中の語の意味
-3. カテゴリごとの要件: [起床時刻とアラーム音](requirements/alarm/index.md)、[予定の読み上げ](requirements/brief/index.md)、[ベッド判定](requirements/bed/index.md)
+3. カテゴリごとの要件: [起床時刻とアラーム音](requirements/alarm/index.md)、[予定の読み上げ](requirements/brief/index.md)、[ベッド判定](requirements/bed/index.md)、[家のサーバーで動かす](requirements/deploy/index.md)
 4. [技術要素](requirements/technology.md): 何で作るか、なぜそれを選んだか
 
 ## 文書の一覧

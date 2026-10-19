@@ -1,0 +1,24 @@
+@startuml overview
+title How press-start reaches the home server
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+node "GitHub" {
+  [CI] as ci
+  database "Container registry (GHCR)" as registry
+}
+node "Private deployment repository" {
+  [Values of the home server] as values
+  [Secret files] as secrets
+}
+node "Home server" {
+  [Compose project] as compose
+  [press-start] as app
+}
+
+ci --> registry : build and publish the image
+compose --> registry : pull the same image
+values --> compose : variables at deploy time
+secrets --> app : read as files
+compose --> app : start at boot and after a crash
+@enduml

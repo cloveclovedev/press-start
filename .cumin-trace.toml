@@ -2,4 +2,4 @@
 prefix = "PS"
 
 # The allowed areas. Add an area here before you write its first requirement.
-areas = ["ALARM", "BRIEF", "BED"]
+areas = ["ALARM", "BRIEF", "BED", "DEPLOY"]

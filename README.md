@@ -12,3 +12,7 @@ The documents are in Japanese. Start at
 [docs/ja/index.md](docs/ja/index.md). They follow the
 format of [cumin-trace](https://github.com/cloveclovedev/cumin-trace), and
 `cumin-trace check` runs on every pull request.
+
+`go check` also runs on every pull request. It runs gofmt, `go build`,
+`go vet`, and `go test` once the repository has a `go.mod`, and passes
+without them until then.

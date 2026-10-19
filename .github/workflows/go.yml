@@ -1,0 +1,54 @@
+name: go
+
+# No path filter on pull_request. A workflow that is skipped leaves a required
+# check pending, and the pending check blocks the merge. The job itself skips
+# the Go steps while the repository has no go.mod.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The steps need no git credentials. Keep the token out of .git/config.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Find go.mod
+        id: module
+        shell: bash
+        run: |
+          if [ -f go.mod ]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            echo "No go.mod at the top of the repository. The Go checks are skipped."
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.module.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go build
+        if: steps.module.outputs.present == 'true'
+        run: go build ./...
+      - name: go vet
+        if: steps.module.outputs.present == 'true'
+        run: go vet ./...
+      - name: go test
+        if: steps.module.outputs.present == 'true'
+        run: go test ./...

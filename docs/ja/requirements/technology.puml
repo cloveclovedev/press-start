@@ -12,11 +12,11 @@ cloud "Cloudflare" {
   [Relay (Workers)] as relay
   database "D1" as d1
 }
-node "Home server" {
+node "Home server (Docker Compose)" {
   [press-start (Go)] as app
   database "SQLite" as db
   [VOICEVOX engine] as tts
-  [ALSA / PipeWire] as audio
+  [ALSA (/dev/snd)] as audio
   [USB speaker] as speaker
 }
 

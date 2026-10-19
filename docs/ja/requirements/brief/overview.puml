@@ -1,0 +1,19 @@
+@startuml overview
+title How a script is made in each round
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+[Calendar events\nand snooze round] as events
+[LLM (Claude API)] as llm
+[Template script] as template
+[Script of this round] as script
+[Speech engine (VOICEVOX)] as tts
+[Speaker] as speaker
+
+events --> llm : before the briefing of this round
+events --> template : when the LLM does not answer\nbefore the briefing starts
+llm --> script
+template --> script
+script --> tts : after the alarm sound
+tts --> speaker
+@enduml

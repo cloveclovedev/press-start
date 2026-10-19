@@ -1,0 +1,28 @@
+@startuml overview
+title How bed presence reaches home
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+node "Bed" {
+  [Withings Sleep] as sensor
+}
+cloud "Internet" {
+  [Withings API] as withings
+  [Relay (Cloudflare Worker)] as relay
+  database "Stored notifications" as store
+}
+node "Home server (no inbound from the internet)" {
+  [press-start] as app
+  database "Latest bed state" as state
+  [Asleep / awake judgment] as judge
+  [Wake-up run] as run
+}
+
+sensor --> withings : bed in / bed out
+withings --> relay : notification (HTTPS)
+relay --> store : keep
+app --> relay : fetch (outbound only)
+app --> state : keep across restarts
+state --> judge : asleep after the set time in bed,\nawake as soon as out of bed
+judge --> run
+@enduml

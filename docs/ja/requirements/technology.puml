@@ -1,0 +1,32 @@
+@startuml technology
+title Technology overview
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+cloud "External services" {
+  [Google Calendar API] as gcal
+  [Withings API] as withings
+  [Claude API] as claude
+}
+cloud "Cloudflare" {
+  [Relay (Workers)] as relay
+  database "D1" as d1
+}
+node "Home server (Docker Compose)" {
+  [press-start (Go)] as app
+  database "SQLite" as db
+  [VOICEVOX engine] as tts
+  [ALSA (/dev/snd)] as audio
+  [USB speaker] as speaker
+}
+
+withings --> relay : notifications
+relay --> d1
+app --> gcal : read events
+app --> relay : fetch notifications
+app --> claude : write scripts
+app --> db
+app --> tts : speech
+app --> audio
+audio --> speaker
+@enduml

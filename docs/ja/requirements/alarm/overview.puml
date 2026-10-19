@@ -1,0 +1,25 @@
+@startuml overview
+title Wake-up run
+skinparam shadowing false
+
+[*] --> Waiting
+Waiting : wake time = earlier of\n(first event - lead time, alarm setting)
+Waiting --> Ringing : wake time, judged asleep\nor bed state unknown
+Waiting --> Watching : wake time, judged awake\n(nothing is played)
+Ringing --> Briefing : alarm sound length elapsed,\njudged awake, or stop request
+Briefing : always read to the end
+Briefing --> Interval : briefing done, judged asleep
+Briefing --> Watching : briefing done, judged awake
+Interval --> Ringing : judged asleep after interval\n(louder, up to the limit)
+Interval --> Watching : judged awake,\nor bed state unknown after interval
+Watching : back-to-bed window (default 30 min)
+Watching --> Ringing : judged asleep\n(louder than before)
+Watching --> [*] : back-to-bed window elapsed
+
+note bottom of Watching
+  Judged asleep and judged awake
+  come from the bed state (PS-BED-008):
+  asleep after 5 min in bed (default),
+  awake as soon as out of bed.
+end note
+@enduml

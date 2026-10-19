@@ -4,8 +4,9 @@ skinparam shadowing false
 
 [*] --> Waiting
 Waiting : wake time = earlier of\n(first event - lead time, alarm setting)
-Waiting --> Ringing : wake time
-Ringing --> Briefing : alarm sound length elapsed,\nor judged awake
+Waiting --> Ringing : wake time, judged asleep
+Waiting --> Watching : wake time, judged awake\n(nothing is played)
+Ringing --> Briefing : alarm sound length elapsed,\njudged awake, or stop request
 Briefing : always read to the end
 Briefing --> Interval : briefing done, judged asleep
 Briefing --> Watching : briefing done, judged awake

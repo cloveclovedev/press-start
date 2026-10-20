@@ -3,9 +3,8 @@
 # The build stage compiles a static binary. The run stage has mpv and amixer
 # (alsa-utils), which the service runs to play the alarm sound on ALSA
 # (PS-ALARM-005.2). The service runs as a user that is not root (UID and GID
-# 10001); Compose adds
-# the group of /dev/snd with group_add, so the image holds no group ID of the
-# home server (PS-DEPLOY-003).
+# 10001); Compose adds the group of /dev/snd with group_add, so the image holds
+# no group ID of the home server (PS-DEPLOY-003).
 FROM golang:1.27.2 AS build
 
 WORKDIR /src

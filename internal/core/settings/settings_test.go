@@ -129,14 +129,16 @@ func TestParseInvalid(t *testing.T) {
 func TestLoadRelativeSoundFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.toml")
-	if err := os.WriteFile(path, []byte("[alarm]\nsound_file = \"sounds/a.mp3\"\nvolume = 50\n"), 0o600); err != nil {
+	want := filepath.Join(dir, "sounds", "a.mp3")
+	if err := os.Mkdir(filepath.Join(dir, "sounds"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	writeFile(t, want, "")
+	writeFile(t, path, "[alarm]\nsound_file = \"sounds/a.mp3\"\nvolume = 50\n")
 	s, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := filepath.Join(dir, "sounds", "a.mp3")
 	if s.Alarm.SoundFile != want {
 		t.Errorf("SoundFile = %q, want %q", s.Alarm.SoundFile, want)
 	}
@@ -146,9 +148,8 @@ func TestLoadAbsoluteSoundFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.toml")
 	abs := filepath.Join(t.TempDir(), "a.wav")
-	if err := os.WriteFile(path, []byte("[alarm]\nsound_file = '"+abs+"'\nvolume = 50\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, abs, "")
+	writeFile(t, path, "[alarm]\nsound_file = '"+abs+"'\nvolume = 50\n")
 	s, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -161,5 +162,41 @@ func TestLoadAbsoluteSoundFile(t *testing.T) {
 func TestLoadMissingFile(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "missing.toml")); err == nil {
 		t.Fatal("Load: got no error")
+	}
+}
+
+func TestLoadSoundFileNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.toml")
+	writeFile(t, path, "[alarm]\nsound_file = \"missing.mp3\"\nvolume = 50\n")
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: got no error")
+	}
+	if !strings.Contains(err.Error(), "alarm.sound_file") {
+		t.Errorf("error %q does not name alarm.sound_file", err)
+	}
+}
+
+func TestLoadSoundFileNotRegular(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.toml")
+	if err := os.Mkdir(filepath.Join(dir, "dir.mp3"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, "[alarm]\nsound_file = \"dir.mp3\"\nvolume = 50\n")
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: got no error")
+	}
+	if !strings.Contains(err.Error(), "alarm.sound_file") {
+		t.Errorf("error %q does not name alarm.sound_file", err)
+	}
+}
+
+func writeFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

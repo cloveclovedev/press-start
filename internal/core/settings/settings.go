@@ -84,7 +84,8 @@ var weekdayKeys = map[string]time.Weekday{
 }
 
 // Load reads and checks the settings file at path. A relative sound_file is
-// relative to the directory of the settings file.
+// relative to the directory of the settings file. The sound file must be a
+// regular file, so a wrong path is found when the settings file is read.
 func Load(path string) (Settings, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -96,6 +97,13 @@ func Load(path string) (Settings, error) {
 	}
 	if !filepath.IsAbs(s.Alarm.SoundFile) {
 		s.Alarm.SoundFile = filepath.Join(filepath.Dir(path), s.Alarm.SoundFile)
+	}
+	info, err := os.Stat(s.Alarm.SoundFile)
+	if err != nil {
+		return Settings{}, fmt.Errorf("alarm.sound_file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return Settings{}, fmt.Errorf("alarm.sound_file: %q is not a regular file", s.Alarm.SoundFile)
 	}
 	return s, nil
 }

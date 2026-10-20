@@ -1,0 +1,12 @@
+# Only the Go sources go into the build context.
+.git
+.github
+.claude
+.cumin
+docs
+tools
+scripts
+*.md
+Dockerfile
+.dockerignore
+compose.yaml

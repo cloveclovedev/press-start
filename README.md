@@ -33,5 +33,8 @@ no value of the home server. Set these variables before `docker compose up`.
 | `PRESS_START_ALSA_MIXER_CONTROL` | yes | Mixer control that `amixer` sets. |
 | `TZ` | yes | Time zone of the wake time. |
 
+The service runs as UID 10001 and GID 10001. The host must let this UID read
+`settings.toml` and the sound file in `PRESS_START_CONFIG_DIR`.
+
 `docker compose config` stops with an error when a required variable is not
 set.

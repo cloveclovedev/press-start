@@ -2,7 +2,8 @@
 #
 # The build stage compiles a static binary. The run stage has mpv and amixer
 # (alsa-utils), which the service runs to play the alarm sound on ALSA
-# (PS-ALARM-005.2). The service runs as a user that is not root; Compose adds
+# (PS-ALARM-005.2). The service runs as a user that is not root (UID and GID
+# 10001); Compose adds
 # the group of /dev/snd with group_add, so the image holds no group ID of the
 # home server (PS-DEPLOY-003).
 FROM golang:1.27.2 AS build
@@ -18,9 +19,12 @@ FROM debian:stable-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends mpv alsa-utils tzdata \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --no-create-home --shell /usr/sbin/nologin press-start
+    && groupadd --gid 10001 press-start \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin press-start
 
 COPY --from=build /out/press-start /usr/local/bin/press-start
 
-USER press-start
+# Fixed IDs above the ranges of system and login accounts, so the service user
+# shares no ID with an account of the host.
+USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/press-start"]

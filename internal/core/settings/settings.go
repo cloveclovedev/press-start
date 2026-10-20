@@ -1,0 +1,191 @@
+// Package settings reads the settings file of press-start into checked values.
+//
+// The settings file is one TOML file (PS-ALARM-010). It holds an alarm
+// setting for each weekday (PS-ALARM-001) and for single dates
+// (PS-ALARM-002).
+package settings
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/BurntSushi/toml"
+)
+
+// DefaultLength is the length of the alarm sound when the file sets none
+// (PS-ALARM-005.4).
+const DefaultLength = 3 * time.Minute
+
+// Settings holds the checked contents of the settings file.
+type Settings struct {
+	Alarm Alarm
+}
+
+// Alarm holds the alarm settings and how the alarm sound plays.
+type Alarm struct {
+	// SoundFile is the path of the alarm sound, an MP3 or WAV file.
+	SoundFile string
+	// Length is how long the alarm sound plays.
+	Length time.Duration
+	// Volume is the speaker volume, from 0 to 100.
+	Volume int
+	// Weekdays holds the alarm setting for each weekday. A weekday that the
+	// file leaves out is off.
+	Weekdays [7]AlarmSetting
+	// Dates holds the alarm settings for single dates. A date setting wins
+	// over the weekday setting, so an off date setting is kept here too.
+	Dates map[Date]AlarmSetting
+}
+
+// AlarmSetting is the alarm setting of one day: a time of day, or off.
+type AlarmSetting struct {
+	// On is false when the setting is "none".
+	On     bool
+	Hour   int
+	Minute int
+}
+
+// Date is a calendar date without a time zone.
+type Date struct {
+	Year  int
+	Month time.Month
+	Day   int
+}
+
+// String returns the date in the form 2006-01-02.
+func (d Date) String() string {
+	return fmt.Sprintf("%04d-%02d-%02d", d.Year, int(d.Month), d.Day)
+}
+
+type fileSettings struct {
+	Alarm fileAlarm `toml:"alarm"`
+}
+
+type fileAlarm struct {
+	SoundFile string            `toml:"sound_file"`
+	Length    *string           `toml:"length"`
+	Volume    *int              `toml:"volume"`
+	Weekdays  map[string]string `toml:"weekdays"`
+	Dates     map[string]string `toml:"dates"`
+}
+
+var weekdayKeys = map[string]time.Weekday{
+	"sunday":    time.Sunday,
+	"monday":    time.Monday,
+	"tuesday":   time.Tuesday,
+	"wednesday": time.Wednesday,
+	"thursday":  time.Thursday,
+	"friday":    time.Friday,
+	"saturday":  time.Saturday,
+}
+
+// Load reads and checks the settings file at path. A relative sound_file is
+// relative to the directory of the settings file.
+func Load(path string) (Settings, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Settings{}, fmt.Errorf("read settings file: %w", err)
+	}
+	s, err := Parse(data)
+	if err != nil {
+		return Settings{}, err
+	}
+	if !filepath.IsAbs(s.Alarm.SoundFile) {
+		s.Alarm.SoundFile = filepath.Join(filepath.Dir(path), s.Alarm.SoundFile)
+	}
+	return s, nil
+}
+
+// Parse checks the contents of a settings file. Each error names the key
+// that is wrong.
+func Parse(data []byte) (Settings, error) {
+	var f fileSettings
+	md, err := toml.Decode(string(data), &f)
+	if err != nil {
+		return Settings{}, fmt.Errorf("parse settings file: %w", err)
+	}
+	if undecoded := md.Undecoded(); len(undecoded) > 0 {
+		return Settings{}, fmt.Errorf("unknown key %s", undecoded[0])
+	}
+
+	a := Alarm{Length: DefaultLength, Dates: map[Date]AlarmSetting{}}
+
+	ext := strings.ToLower(filepath.Ext(f.Alarm.SoundFile))
+	if ext != ".mp3" && ext != ".wav" {
+		return Settings{}, fmt.Errorf("alarm.sound_file: %q is not an .mp3 or .wav file", f.Alarm.SoundFile)
+	}
+	a.SoundFile = f.Alarm.SoundFile
+
+	if f.Alarm.Length != nil {
+		d, err := time.ParseDuration(*f.Alarm.Length)
+		if err != nil {
+			return Settings{}, fmt.Errorf("alarm.length: %w", err)
+		}
+		if d <= 0 {
+			return Settings{}, fmt.Errorf("alarm.length: %s is not more than 0", d)
+		}
+		a.Length = d
+	}
+
+	if f.Alarm.Volume == nil {
+		return Settings{}, errors.New("alarm.volume: missing")
+	}
+	if v := *f.Alarm.Volume; v < 0 || v > 100 {
+		return Settings{}, fmt.Errorf("alarm.volume: %d is not from 0 to 100", v)
+	}
+	a.Volume = *f.Alarm.Volume
+
+	for key, value := range f.Alarm.Weekdays {
+		day, ok := weekdayKeys[key]
+		if !ok {
+			return Settings{}, fmt.Errorf("alarm.weekdays.%s: unknown weekday", key)
+		}
+		setting, err := parseAlarmSetting(value)
+		if err != nil {
+			return Settings{}, fmt.Errorf("alarm.weekdays.%s: %w", key, err)
+		}
+		a.Weekdays[day] = setting
+	}
+
+	for key, value := range f.Alarm.Dates {
+		t, err := time.Parse(time.DateOnly, key)
+		if err != nil {
+			return Settings{}, fmt.Errorf("alarm.dates.%q: date is not in the form 2006-01-02", key)
+		}
+		setting, err := parseAlarmSetting(value)
+		if err != nil {
+			return Settings{}, fmt.Errorf("alarm.dates.%q: %w", key, err)
+		}
+		a.Dates[Date{Year: t.Year(), Month: t.Month(), Day: t.Day()}] = setting
+	}
+
+	return Settings{Alarm: a}, nil
+}
+
+// parseAlarmSetting reads "HH:MM" or "none".
+func parseAlarmSetting(value string) (AlarmSetting, error) {
+	if value == "none" {
+		return AlarmSetting{}, nil
+	}
+	bad := fmt.Errorf("%q is not \"HH:MM\" or \"none\"", value)
+	if len(value) != 5 || value[2] != ':' {
+		return AlarmSetting{}, bad
+	}
+	hour, ok1 := twoDigits(value[0:2])
+	minute, ok2 := twoDigits(value[3:5])
+	if !ok1 || !ok2 || hour > 23 || minute > 59 {
+		return AlarmSetting{}, bad
+	}
+	return AlarmSetting{On: true, Hour: hour, Minute: minute}, nil
+}
+
+func twoDigits(s string) (int, bool) {
+	if s[0] < '0' || s[0] > '9' || s[1] < '0' || s[1] > '9' {
+		return 0, false
+	}
+	return int(s[0]-'0')*10 + int(s[1]-'0'), true
+}

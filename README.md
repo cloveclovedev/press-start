@@ -16,3 +16,25 @@ format of [cumin-trace](https://github.com/cloveclovedev/cumin-trace), and
 `go check` also runs on every pull request. It runs gofmt, `go build`,
 `go vet`, and `go test` once the repository has a `go.mod`, and passes
 without them until then.
+
+## Run with Docker Compose
+
+`compose.yaml` runs the image `ghcr.io/cloveclovedev/press-start`. It holds
+no value of the home server. Set these variables before `docker compose up`.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `PRESS_START_TAG` | no | Tag of the image. Default: `latest`. |
+| `PRESS_START_AUDIO_GID` | yes | Group ID that owns `/dev/snd` on the host. |
+| `PRESS_START_CGROUP_PARENT` | no | Parent cgroup (`cgroup_parent`). Empty: the Docker default. |
+| `PRESS_START_CONFIG_DIR` | yes | Host directory with `settings.toml`. It is mounted read-only at `/config`. |
+| `PRESS_START_ALSA_DEVICE` | yes | ALSA device of `mpv` (`--audio-device=alsa/<device>`). |
+| `PRESS_START_ALSA_MIXER_CARD` | yes | ALSA card of `amixer -c`. |
+| `PRESS_START_ALSA_MIXER_CONTROL` | yes | Mixer control that `amixer` sets. |
+| `TZ` | yes | Time zone of the wake time. |
+
+The service runs as UID 10001 and GID 10001. The host must let this UID read
+`settings.toml` and the sound file in `PRESS_START_CONFIG_DIR`.
+
+`docker compose config` stops with an error when a required variable is not
+set.

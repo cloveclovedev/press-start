@@ -1,0 +1,31 @@
+# The Compose project of press-start. Every value of the home server is a
+# variable (PS-DEPLOY-003). A private repository sets the values.
+#
+# "${NAME:?}" makes `docker compose` stop when the variable is not set.
+services:
+  press-start:
+    image: ghcr.io/cloveclovedev/press-start:${PRESS_START_TAG:-latest}
+    # Start again after a crash, and at boot with the Docker daemon
+    # (PS-DEPLOY-002).
+    restart: always
+    # The speaker of the home server, with nobody logged in (PS-ALARM-005.2).
+    devices:
+      - /dev/snd
+    group_add:
+      - ${PRESS_START_AUDIO_GID:?set the group ID of /dev/snd}
+    # Empty means the default cgroup parent of Docker.
+    cgroup_parent: ${PRESS_START_CGROUP_PARENT:-}
+    # Mount the directory, not the file: an editor that replaces the file
+    # breaks a file mount, and the service reads the file again
+    # (PS-ALARM-010.1).
+    volumes:
+      - type: bind
+        source: ${PRESS_START_CONFIG_DIR:?set the directory of settings.toml}
+        target: /config
+        read_only: true
+    environment:
+      PRESS_START_SETTINGS: /config/settings.toml
+      PRESS_START_ALSA_DEVICE: ${PRESS_START_ALSA_DEVICE:?set the ALSA device of mpv}
+      PRESS_START_ALSA_MIXER_CARD: ${PRESS_START_ALSA_MIXER_CARD:?set the ALSA card of amixer}
+      PRESS_START_ALSA_MIXER_CONTROL: ${PRESS_START_ALSA_MIXER_CONTROL:?set the mixer control of amixer}
+      TZ: ${TZ:?set the time zone of the wake time}

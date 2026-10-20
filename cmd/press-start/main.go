@@ -14,6 +14,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// The zone data is in the binary, so TZ loads without zone data on the
+	// host or in the image.
+	_ "time/tzdata"
 
 	"github.com/mkuri/press-start/internal/alarm"
 	"github.com/mkuri/press-start/internal/core/settings"
@@ -26,6 +29,10 @@ const (
 	envALSADevice   = "PRESS_START_ALSA_DEVICE"
 	envMixerCard    = "PRESS_START_ALSA_MIXER_CARD"
 	envMixerControl = "PRESS_START_ALSA_MIXER_CONTROL"
+	// envTZ is the time zone of the wake time. The process reads it too, but
+	// Go uses UTC without an error when the zone does not load, so run loads
+	// it again and stops on an error.
+	envTZ = "TZ"
 )
 
 func main() {
@@ -44,6 +51,7 @@ type config struct {
 	alsaDevice   string
 	mixerCard    string
 	mixerControl string
+	location     *time.Location
 }
 
 // newPlayerFunc makes the player of the alarm sound from the config.
@@ -72,7 +80,7 @@ func runWith(ctx context.Context, getenv func(string) string, stdout io.Writer, 
 		Settings: store,
 		Player:   newPlayer(cfg),
 		Logger:   logger,
-		Location: time.Local,
+		Location: cfg.location,
 	}
 	if err := s.Run(ctx); err != nil && !errors.Is(err, ctx.Err()) {
 		return err
@@ -80,7 +88,8 @@ func runWith(ctx context.Context, getenv func(string) string, stdout io.Writer, 
 	return nil
 }
 
-// readConfig reads the variables. Its error names each missing variable.
+// readConfig reads the variables and loads the time zone of TZ. Its error
+// names each missing variable, or TZ when the zone does not load.
 func readConfig(getenv func(string) string) (config, error) {
 	var missing []string
 	get := func(name string) string {
@@ -96,8 +105,14 @@ func readConfig(getenv func(string) string) (config, error) {
 		mixerCard:    get(envMixerCard),
 		mixerControl: get(envMixerControl),
 	}
+	tz := get(envTZ)
 	if len(missing) > 0 {
 		return config{}, fmt.Errorf("missing environment variables: %s", strings.Join(missing, ", "))
 	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return config{}, fmt.Errorf("load time zone %s=%q: %w", envTZ, tz, err)
+	}
+	cfg.location = loc
 	return cfg, nil
 }

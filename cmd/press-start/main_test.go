@@ -50,7 +50,10 @@ func writeSettings(t *testing.T) string {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "settings.toml")
-	data := "[alarm]\nsound_file = \"alarm.mp3\"\nvolume = 50\n\n[alarm.weekdays]\nmonday = \"07:00\"\n"
+	data := "[alarm]\nsound_file = \"alarm.mp3\"\nvolume = 50\n\n[alarm.weekdays]\n"
+	for _, day := range []string{"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"} {
+		data += day + " = \"07:00\"\n"
+	}
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -67,11 +70,12 @@ func validEnv(settingsPath string) map[string]string {
 		envALSADevice:   "default",
 		envMixerCard:    "0",
 		envMixerControl: "Master",
+		envTZ:           "Asia/Tokyo",
 	}
 }
 
 func TestRunNamesEachMissingVariable(t *testing.T) {
-	names := []string{envSettings, envALSADevice, envMixerCard, envMixerControl}
+	names := []string{envSettings, envALSADevice, envMixerCard, envMixerControl, envTZ}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			vars := validEnv(writeSettings(t))
@@ -114,13 +118,44 @@ func TestRunFailsWhenSettingsDoNotLoad(t *testing.T) {
 	}
 }
 
+func TestRunFailsOnUnknownTimeZone(t *testing.T) {
+	vars := validEnv(writeSettings(t))
+	vars[envTZ] = "Asia/Tokio"
+	err := runWith(context.Background(), env(vars), &syncBuffer{}, newFakePlayer)
+	if err == nil || !strings.Contains(err.Error(), envTZ) {
+		t.Fatalf("run = %v, want an error that names %s", err, envTZ)
+	}
+}
+
 func TestRunRecordsWakeTimeAndStopsWithContext(t *testing.T) {
+	// Each zone has no daylight saving time, so its offset is fixed.
+	tests := map[string]string{
+		"Asia/Tokyo":   "+09:00",
+		"Asia/Kolkata": "+05:30",
+		"UTC":          "Z",
+	}
+	for zone, offset := range tests {
+		t.Run(zone, func(t *testing.T) {
+			vars := validEnv(writeSettings(t))
+			vars[envTZ] = zone
+			wake := runUntilWakeTime(t, vars)
+			if !strings.HasSuffix(wake, "T07:00:00"+offset) {
+				t.Fatalf("wake_time = %q, want 07:00 with offset %s", wake, offset)
+			}
+		})
+	}
+}
+
+// runUntilWakeTime runs until the first wake time decided line, ends the
+// context, checks that run returns nil, and returns the wake_time.
+func runUntilWakeTime(t *testing.T, vars map[string]string) string {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out syncBuffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runWith(ctx, env(validEnv(writeSettings(t))), &out, newFakePlayer)
+		done <- runWith(ctx, env(vars), &out, newFakePlayer)
 	}()
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -153,4 +188,5 @@ func TestRunRecordsWakeTimeAndStopsWithContext(t *testing.T) {
 	if line.Msg != "wake time decided" || line.Date == "" || line.WakeTime == "" {
 		t.Fatalf("first line = %+v, want a wake time decided line with date and wake_time", line)
 	}
+	return line.WakeTime
 }

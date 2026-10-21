@@ -2,6 +2,7 @@ package alarm
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -101,14 +102,20 @@ func (s *Scheduler) check(ctx context.Context) {
 }
 
 // wakeUp is the wake-up run: it sets the volume, then plays the alarm sound
-// for its length. The sound plays also when the volume cannot be set.
+// for its length. The sound plays also when the volume cannot be set. When
+// the run ends because the service stops, the sound stopped as expected, so
+// the record is a stop and not a failure.
 func (s *Scheduler) wakeUp(ctx context.Context, date settings.Date, a settings.Alarm) {
 	s.record(ctx, slog.LevelInfo, "alarm sound started", "date", date.String())
 	if err := s.Player.SetVolume(ctx, a.Volume); err != nil {
 		s.record(ctx, slog.LevelError, "set volume failed", "volume", a.Volume, "error", err)
 	}
 	if err := s.Player.Play(ctx, a.SoundFile, a.Length); err != nil {
-		s.record(ctx, slog.LevelError, "play failed", "error", err)
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			s.record(ctx, slog.LevelInfo, "alarm sound stopped", "reason", "service stopping")
+		} else {
+			s.record(ctx, slog.LevelError, "play failed", "error", err)
+		}
 	}
 	s.record(ctx, slog.LevelInfo, "alarm sound ended", "date", date.String())
 }

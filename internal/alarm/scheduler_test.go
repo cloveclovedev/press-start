@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -51,10 +52,14 @@ type playerCall struct {
 }
 
 // fakePlayer records its calls. Play takes the length on the fake clock.
+// With stopInPlay, Play cancels the run, as a stop of the service does, and
+// returns the context error wrapped like the alsa Player does.
 type fakePlayer struct {
-	clock     *fakeClock
-	calls     []playerCall
-	volumeErr error
+	clock      *fakeClock
+	calls      []playerCall
+	volumeErr  error
+	playErr    error
+	stopInPlay bool
 }
 
 func (p *fakePlayer) SetVolume(_ context.Context, percent int) error {
@@ -62,10 +67,15 @@ func (p *fakePlayer) SetVolume(_ context.Context, percent int) error {
 	return p.volumeErr
 }
 
-func (p *fakePlayer) Play(_ context.Context, file string, length time.Duration) error {
+func (p *fakePlayer) Play(ctx context.Context, file string, length time.Duration) error {
 	p.calls = append(p.calls, playerCall{name: "Play", at: p.clock.now, file: file, length: length})
+	if p.stopInPlay {
+		p.clock.now = p.clock.now.Add(length / 2)
+		p.clock.cancel()
+		return fmt.Errorf("alsa: play %s: %w", file, ctx.Err())
+	}
 	p.clock.now = p.clock.now.Add(length)
-	return nil
+	return p.playErr
 }
 
 func (p *fakePlayer) plays() []playerCall {
@@ -92,10 +102,18 @@ type schedulerFixture struct {
 // runScheduler runs a Scheduler on a fake clock from start to end.
 func runScheduler(t *testing.T, start, end time.Time, current func(now time.Time) settings.Alarm, volumeErr error) *schedulerFixture {
 	t.Helper()
+	return runSchedulerWith(t, start, end, current, &fakePlayer{volumeErr: volumeErr})
+}
+
+// runSchedulerWith is runScheduler with a prepared player. It sets the clock
+// of the player.
+func runSchedulerWith(t *testing.T, start, end time.Time, current func(now time.Time) settings.Alarm, player *fakePlayer) *schedulerFixture {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := &schedulerFixture{clock: &fakeClock{now: start, end: end, cancel: cancel}}
-	f.player = &fakePlayer{clock: f.clock, volumeErr: volumeErr}
+	player.clock = f.clock
+	f.player = player
 	s := &Scheduler{
 		Clock: f.clock,
 		Settings: sourceFunc(func() settings.Settings {
@@ -117,6 +135,7 @@ type logLine struct {
 	Msg      string    `json:"msg"`
 	Date     string    `json:"date"`
 	WakeTime string    `json:"wake_time"`
+	Reason   string    `json:"reason"`
 }
 
 func (f *schedulerFixture) lines(t *testing.T) []logLine {
@@ -305,5 +324,48 @@ func TestSchedulerRecordsEventsInOrder(t *testing.T) {
 		if g.Msg != w.Msg || g.Date != w.Date || g.WakeTime != w.WakeTime || !g.Time.Equal(w.Time) {
 			t.Errorf("log line %d = %+v, want %+v", i, g, w)
 		}
+	}
+}
+
+func TestSchedulerRecordsPlayEnd(t *testing.T) {
+	tests := []struct {
+		name   string
+		player *fakePlayer
+		want   logLine
+	}{
+		{
+			"service stops",
+			&fakePlayer{stopInPlay: true},
+			logLine{Level: "INFO", Msg: "alarm sound stopped", Reason: "service stopping"},
+		},
+		{
+			"play fails",
+			&fakePlayer{playErr: errors.New("mpv exited")},
+			logLine{Level: "ERROR", Msg: "play failed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := runSchedulerWith(t, at(14, 6, 29, 50), at(14, 7, 0, 0), func(time.Time) settings.Alarm {
+				return alarmAt(6, 30)
+			}, tt.player)
+			got := f.lines(t)
+			var msgs []string
+			for _, l := range got {
+				msgs = append(msgs, l.Msg)
+			}
+			wantMsgs := []string{"wake time decided", "alarm sound started", tt.want.Msg, "alarm sound ended"}
+			if fmt.Sprint(msgs) != fmt.Sprint(wantMsgs) {
+				t.Fatalf("log messages = %v, want %v", msgs, wantMsgs)
+			}
+			if g := got[2]; g.Level != tt.want.Level || g.Reason != tt.want.Reason {
+				t.Errorf("%s: level %q reason %q, want level %q reason %q", g.Msg, g.Level, g.Reason, tt.want.Level, tt.want.Reason)
+			}
+			for _, l := range got {
+				if l.Level == "ERROR" && tt.want.Level != "ERROR" {
+					t.Errorf("unexpected ERROR line: %+v", l)
+				}
+			}
+		})
 	}
 }

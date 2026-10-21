@@ -34,7 +34,12 @@ no value of the home server. Set these variables before `docker compose up`.
 | `TZ` | yes | Time zone of the wake time. |
 
 The service runs as UID 10001 and GID 10001. The host must let this UID read
-`settings.toml` and the sound file in `PRESS_START_CONFIG_DIR`.
+`settings.toml` and the sound file in `PRESS_START_CONFIG_DIR`, and enter that
+directory (the `x` permission), for example with mode `0755` on the directory
+and `0644` on the files.
+
+The project name is fixed to `press-start` in `compose.yaml`, so every copy
+of the file runs the same project.
 
 `docker compose config` stops with an error when a required variable is not
 set.

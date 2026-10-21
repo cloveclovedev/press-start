@@ -6,8 +6,8 @@ import (
 )
 
 // Store reads the settings file again on each call to Current, so a changed
-// file is used without a restart (PS-ALARM-010.1). When the file cannot be
-// read, Store keeps the last good settings (PS-ALARM-010.2).
+// file is used without a restart. When the file cannot be read, Store keeps
+// the last good settings.
 type Store struct {
 	path   string
 	logger *slog.Logger

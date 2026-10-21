@@ -12,7 +12,7 @@ import (
 const CheckInterval = 15 * time.Second
 
 // StartWindow is how long after the wake time the wake-up run may still
-// start (PS-ALARM-005.1).
+// start.
 const StartWindow = time.Minute
 
 // Clock tells the time and waits. Tests replace it so that they take no real
@@ -60,10 +60,9 @@ type Scheduler struct {
 }
 
 // Run decides the wake time every CheckInterval until ctx ends. It reads the
-// settings at each decision, so a changed file is used without a restart
-// (PS-ALARM-010.1). It starts the wake-up run once for each date, within
-// StartWindow of the wake time (PS-ALARM-005.1). A day without a wake time
-// has no wake-up run (PS-ALARM-003.3). Run returns ctx.Err().
+// settings at each decision, so a changed file is used without a restart. It
+// starts the wake-up run once for each date, within StartWindow of the wake
+// time. A day without a wake time has no wake-up run. Run returns ctx.Err().
 func (s *Scheduler) Run(ctx context.Context) error {
 	for {
 		s.check(ctx)
@@ -101,9 +100,8 @@ func (s *Scheduler) check(ctx context.Context) {
 	s.wakeUp(ctx, date, a)
 }
 
-// wakeUp is the wake-up run: it sets the volume (PS-ALARM-005.6), then plays
-// the alarm sound for its length (PS-ALARM-005.4). The sound plays also when
-// the volume cannot be set.
+// wakeUp is the wake-up run: it sets the volume, then plays the alarm sound
+// for its length. The sound plays also when the volume cannot be set.
 func (s *Scheduler) wakeUp(ctx context.Context, date settings.Date, a settings.Alarm) {
 	s.record(ctx, slog.LevelInfo, "alarm sound started", "date", date.String())
 	if err := s.Player.SetVolume(ctx, a.Volume); err != nil {
@@ -115,7 +113,7 @@ func (s *Scheduler) wakeUp(ctx context.Context, date settings.Date, a settings.A
 	s.record(ctx, slog.LevelInfo, "alarm sound ended", "date", date.String())
 }
 
-// record logs msg at the time of the Clock (PS-ALARM-008).
+// record logs msg at the time of the Clock.
 func (s *Scheduler) record(ctx context.Context, level slog.Level, msg string, args ...any) {
 	h := s.Logger.Handler()
 	if !h.Enabled(ctx, level) {

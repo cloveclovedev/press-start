@@ -1,6 +1,6 @@
 // Command press-start is the service of the home server. It takes every value
-// of the home server from environment variables (PS-DEPLOY-003), and records
-// as JSON lines on standard output (PS-ALARM-008).
+// of the home server from environment variables, and records as JSON lines on
+// standard output.
 package main
 
 import (

@@ -16,7 +16,7 @@ node "Home server" {
   [press-start] as app
 }
 
-ci --> registry : build and publish the image
+ci --> registry : build and publish the image,\nadd the version of a release
 compose --> registry : pull the same image
 values --> compose : variables at deploy time
 secrets --> app : read as files

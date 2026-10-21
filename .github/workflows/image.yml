@@ -6,7 +6,8 @@ name: image
 #
 # A release tag (vX.Y.Z, or vX.Y.Z-<pre-release>) builds nothing: it adds the
 # version as a tag to the image that main already built for that commit, so a
-# release runs exactly the image that was built and checked on main.
+# release runs exactly the image that was built and checked on main
+# (PS-DEPLOY-005).
 on:
   push:
     branches: [main]

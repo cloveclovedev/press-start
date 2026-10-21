@@ -1,8 +1,7 @@
 name: image
 
 # Build the image on every push to main and publish it to GHCR (GitHub
-# Container Registry). The home server pulls this image and builds nothing
-# (PS-DEPLOY-001).
+# Container Registry). The home server pulls this image and builds nothing.
 #
 # A release tag (vX.Y.Z, or vX.Y.Z-<pre-release>) builds nothing: it adds the
 # version as a tag to the image that main already built for that commit, so a

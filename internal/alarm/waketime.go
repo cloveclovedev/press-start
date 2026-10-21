@@ -7,11 +7,10 @@ import (
 	"github.com/mkuri/press-start/internal/core/settings"
 )
 
-// WakeTime returns the wake time of date in loc from the alarm settings.
-// The second result is false when the day has no wake-up run
-// (PS-ALARM-003.3). A date setting wins over the weekday setting, also when
-// the date setting is off (PS-ALARM-002). Otherwise the weekday setting of
-// date is used (PS-ALARM-001).
+// WakeTime returns the wake time of date in loc from the alarm settings. The
+// second result is false when the day has no wake-up run. A date setting wins
+// over the weekday setting, also when the date setting is off. Otherwise the
+// weekday setting of date is used.
 func WakeTime(date settings.Date, loc *time.Location, a settings.Alarm) (time.Time, bool) {
 	setting, ok := a.Dates[date]
 	if !ok {

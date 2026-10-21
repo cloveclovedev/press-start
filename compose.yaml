@@ -1,5 +1,5 @@
 # The Compose project of press-start. Every value of the home server is a
-# variable (PS-DEPLOY-003). A private repository sets the values.
+# variable. A private repository sets the values.
 #
 # "${NAME:?}" makes `docker compose` stop when the variable is not set.
 
@@ -11,10 +11,9 @@ name: press-start
 services:
   press-start:
     image: ghcr.io/cloveclovedev/press-start:${PRESS_START_TAG:-latest}
-    # Start again after a crash, and at boot with the Docker daemon
-    # (PS-DEPLOY-002).
+    # Start again after a crash, and at boot with the Docker daemon.
     restart: always
-    # The speaker of the home server, with nobody logged in (PS-ALARM-005.2).
+    # The speaker of the home server, with nobody logged in.
     devices:
       - /dev/snd
     group_add:
@@ -22,8 +21,7 @@ services:
     # Empty means the default cgroup parent of Docker.
     cgroup_parent: ${PRESS_START_CGROUP_PARENT:-}
     # Mount the directory, not the file: an editor that replaces the file
-    # breaks a file mount, and the service reads the file again
-    # (PS-ALARM-010.1).
+    # breaks a file mount, and the service reads the file again.
     volumes:
       - type: bind
         source: ${PRESS_START_CONFIG_DIR:?set the directory of settings.toml}

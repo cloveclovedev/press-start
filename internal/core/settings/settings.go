@@ -1,8 +1,7 @@
 // Package settings reads the settings file of press-start into checked values.
 //
-// The settings file is one TOML file (PS-ALARM-010). It holds an alarm
-// setting for each weekday (PS-ALARM-001) and for single dates
-// (PS-ALARM-002).
+// The settings file is one TOML file. It holds an alarm setting for each
+// weekday and for single dates.
 package settings
 
 import (
@@ -16,8 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// DefaultLength is the length of the alarm sound when the file sets none
-// (PS-ALARM-005.4).
+// DefaultLength is the length of the alarm sound when the file sets none.
 const DefaultLength = 3 * time.Minute
 
 // Settings holds the checked contents of the settings file.

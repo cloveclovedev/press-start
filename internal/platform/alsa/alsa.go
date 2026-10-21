@@ -1,8 +1,8 @@
 // Package alsa plays sound on the speaker of the home server through ALSA.
 //
 // The sound plays with mpv to ALSA directly, never through PipeWire, so that
-// it plays with nobody logged in (PS-ALARM-005.2). The volume is set on the
-// ALSA mixer with amixer before the sound plays (PS-ALARM-005.6).
+// it plays with nobody logged in. The volume is set on the ALSA mixer with
+// amixer before the sound plays.
 package alsa
 
 import (
@@ -60,7 +60,7 @@ func (p *Player) SetVolume(ctx context.Context, percent int) error {
 	return nil
 }
 
-// Play plays file in a loop for length, then stops mpv (PS-ALARM-005.4).
+// Play plays file in a loop for length, then stops mpv.
 // The stop at the length is a success. Play returns an error when mpv exits
 // before the length, or when ctx ends first.
 func (p *Player) Play(ctx context.Context, file string, length time.Duration) error {

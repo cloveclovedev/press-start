@@ -41,8 +41,8 @@ set.
 
 ## Releases
 
-A release is a git tag `vX.Y.Z` on a commit of `main`, or `vX.Y.Z-<pre-release>`
-for a release before a phase is complete. Create it as a GitHub release. The
+A release is a git tag `vX.Y.Z` on a commit of `main`. Create it as a GitHub
+release. Releases before the phase v0.1 is complete are `v0.0.Z`. The
 `image` workflow adds the version as a tag to the image that `main` already
 built for that commit, so the release image is the image of that commit. It
 does not move `latest`.

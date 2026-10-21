@@ -43,3 +43,15 @@ of the file runs the same project.
 
 `docker compose config` stops with an error when a required variable is not
 set.
+
+## Releases
+
+A release is a git tag `vX.Y.Z` on a commit of `main`. Create it as a GitHub
+release. Releases before the phase v0.1 is complete are `v0.0.Z`. The
+`image` workflow adds the version as a tag to the image that `main` already
+built for that commit, so the release image is the image of that commit. It
+does not move `latest`.
+
+A deployment names a release, or the full SHA of a commit of `main` when it
+needs a commit between releases. The same name selects both `compose.yaml`
+and the image tag.

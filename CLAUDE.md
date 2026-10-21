@@ -38,8 +38,10 @@ and read every document that your task touches before you change code.
 
 ## How we work
 
-- Requirement first. Every behavior traces to a requirement ID such as
-  `PS-ALARM-003`. If no requirement covers a behavior, ask.
+- Requirement first. Every behavior traces to a requirement such as
+  `PS-ALARM-003`. The requirement issue and its implementation issues record
+  which requirement a change implements. If no requirement covers a behavior,
+  ask.
 - Test first. A requirement verified by `test` gets a test that proves it.
 - Verify external APIs (Google Calendar, Withings, Cloudflare, Claude,
   VOICEVOX) in their official documentation before use, and say which page you
@@ -53,6 +55,10 @@ and read every document that your task touches before you change code.
   wiring in `cmd/`. Provider types stop at the adapter boundary.
 - Code, comments, test names, commit messages, and pull requests are in
   English. Documents under `docs/ja/` are in Japanese.
+- Do not write requirement IDs in code, comments, test names, or
+  configuration files such as the `Dockerfile`, `compose.yaml`, and
+  workflows. Name them in issues and pull requests. A comment says in its own
+  words why the code is the way it is.
 
 ## Documents
 

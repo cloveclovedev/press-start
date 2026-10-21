@@ -23,7 +23,8 @@ RUN apt-get update \
 
 COPY --from=build /out/press-start /usr/local/bin/press-start
 
-# Fixed IDs above the ranges of system and login accounts, so the service user
-# shares no ID with an account of the host.
+# Fixed IDs that do not depend on the base image. 10001 is above the range of
+# system accounts and far above the login accounts that a host creates from
+# 1000 upwards.
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/press-start"]

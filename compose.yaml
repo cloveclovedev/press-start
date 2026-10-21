@@ -2,6 +2,12 @@
 # variable (PS-DEPLOY-003). A private repository sets the values.
 #
 # "${NAME:?}" makes `docker compose` stop when the variable is not set.
+
+# A fixed project name: without it, Compose names the project after the
+# directory of this file, and a copy of this file in another directory would
+# start a second alarm next to the first.
+name: press-start
+
 services:
   press-start:
     image: ghcr.io/cloveclovedev/press-start:${PRESS_START_TAG:-latest}

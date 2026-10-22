@@ -44,6 +44,22 @@ of the file runs the same project.
 `docker compose config` stops with an error when a required variable is not
 set.
 
+## Get the Google refresh token
+
+The service reads Google Calendar with a refresh token. Get the token once on
+a computer with a browser:
+
+1. In Google Cloud, create an OAuth client of the type "Desktop app", and
+   download its JSON file.
+2. Run `go run ./cmd/press-start auth -client <path of the JSON file>`.
+3. Open the URL that the command prints, and give consent.
+4. Store the token that the command prints in the secret manager.
+
+The command asks for `calendar.events.readonly` only. It listens on
+`127.0.0.1` on a free port for the redirect of the browser, and uses PKCE
+(proof key for code exchange). It prints the token once to standard output
+and writes it to no file.
+
 ## Releases
 
 A release is a git tag `vX.Y.Z` on a commit of `main`. Create it as a GitHub

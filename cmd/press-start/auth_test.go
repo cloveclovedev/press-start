@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -30,22 +31,28 @@ func writeClient(t *testing.T) string {
 }
 
 // redirectWith acts as the browser: it sends the redirect with the query that
-// query makes from the consent URL.
-func redirectWith(t *testing.T, query func(consent url.Values) url.Values) func(string) {
+// query makes from the consent URL, and checks that the response has the
+// status wantStatus. The test waits for the redirect before it ends.
+func redirectWith(t *testing.T, wantStatus int, query func(consent url.Values) url.Values) func(string) {
+	var wg sync.WaitGroup
+	t.Cleanup(wg.Wait)
 	return func(consentURL string) {
 		u, err := url.Parse(consentURL)
 		if err != nil {
 			t.Errorf("parse consent URL: %v", err)
 			return
 		}
-		go func() {
+		wg.Go(func() {
 			resp, err := http.Get(u.Query().Get("redirect_uri") + "?" + query(u.Query()).Encode())
 			if err != nil {
 				t.Errorf("redirect: %v", err)
 				return
 			}
 			resp.Body.Close()
-		}()
+			if resp.StatusCode != wantStatus {
+				t.Errorf("redirect status = %d, want %d", resp.StatusCode, wantStatus)
+			}
+		})
 	}
 }
 
@@ -68,7 +75,7 @@ func TestAuthPrintsTheRefreshTokenOnceAndWritesNoFile(t *testing.T) {
 	work := t.TempDir()
 	t.Chdir(work)
 	var stdout, stderr bytes.Buffer
-	show := redirectWith(t, func(q url.Values) url.Values {
+	show := redirectWith(t, http.StatusOK, func(q url.Values) url.Values {
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
 	if err := runAuthWith(context.Background(), []string{"-client", client}, &stdout, &stderr, show); err != nil {
@@ -99,7 +106,7 @@ func TestAuthFailsOnABadRedirectAndPrintsNoToken(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			err := runAuthWith(context.Background(), []string{"-client", writeClient(t)}, &stdout, &stderr, redirectWith(t, query))
+			err := runAuthWith(context.Background(), []string{"-client", writeClient(t)}, &stdout, &stderr, redirectWith(t, http.StatusBadRequest, query))
 			if err == nil {
 				t.Error("err = nil")
 			}
@@ -107,6 +114,13 @@ func TestAuthFailsOnABadRedirectAndPrintsNoToken(t *testing.T) {
 				t.Errorf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
 			}
 		})
+	}
+}
+
+func TestAuthHelpIsNoError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := runAuthWith(context.Background(), []string{"-h"}, &stdout, &stderr, func(string) {}); err != nil {
+		t.Errorf("err = %v", err)
 	}
 }
 

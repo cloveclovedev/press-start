@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -85,8 +86,12 @@ func RefreshToken(ctx context.Context, cfg *oauth2.Config, ln net.Listener, show
 	// The state ties the redirect to this run.
 	state := rand.Text()
 	verifier := oauth2.GenerateVerifier()
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return "", fmt.Errorf("listener: %s is not a TCP address", ln.Addr())
+	}
 	c := *cfg
-	c.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d/", ln.Addr().(*net.TCPAddr).Port)
+	c.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d/", addr.Port)
 
 	// The browser may send more than one request, such as for an icon. Only
 	// the first request on "/" counts.
@@ -104,11 +109,17 @@ func RefreshToken(ctx context.Context, cfg *oauth2.Config, ln net.Listener, show
 			http.Error(w, "press-start: authorization failed. See the terminal.", http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintln(w, "press-start: authorization received. You can close this tab.")
+		fmt.Fprintln(w, "press-start: authorization received. Return to the terminal for the result.")
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	defer srv.Close()
+	// Shutdown lets the handler finish its response before the server
+	// closes, so that the browser gets the page also on a failure.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
 
 	// access_type=offline and prompt=consent make Google return a refresh
 	// token, also when the user gave consent before.

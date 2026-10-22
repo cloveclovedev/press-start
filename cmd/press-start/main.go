@@ -145,6 +145,9 @@ func runAuthWith(ctx context.Context, args []string, stdout, stderr io.Writer, s
 	fs.SetOutput(stderr)
 	client := fs.String("client", "", `path of the OAuth client JSON file (type "Desktop app")`)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if *client == "" || fs.NArg() > 0 {

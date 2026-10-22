@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -64,8 +65,12 @@ func listen(t *testing.T) net.Listener {
 }
 
 // browser returns a showURL that acts as the browser: it sends the redirect
-// with the query that query makes from the consent URL.
-func browser(t *testing.T, query func(consent url.Values) url.Values) func(string) {
+// with the query that query makes from the consent URL, and checks that the
+// response has the status wantStatus. The test waits for the redirect before
+// it ends.
+func browser(t *testing.T, wantStatus int, query func(consent url.Values) url.Values) func(string) {
+	var wg sync.WaitGroup
+	t.Cleanup(wg.Wait)
 	return func(consentURL string) {
 		u, err := url.Parse(consentURL)
 		if err != nil {
@@ -73,14 +78,17 @@ func browser(t *testing.T, query func(consent url.Values) url.Values) func(strin
 			return
 		}
 		redirect := u.Query().Get("redirect_uri")
-		go func() {
+		wg.Go(func() {
 			resp, err := http.Get(redirect + "?" + query(u.Query()).Encode())
 			if err != nil {
 				t.Errorf("redirect: %v", err)
 				return
 			}
 			resp.Body.Close()
-		}()
+			if resp.StatusCode != wantStatus {
+				t.Errorf("redirect status = %d, want %d", resp.StatusCode, wantStatus)
+			}
+		})
 	}
 }
 
@@ -131,7 +139,7 @@ func TestRefreshTokenConsentURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	var consent url.Values
-	show := browser(t, func(q url.Values) url.Values {
+	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
 		consent = q
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
@@ -161,7 +169,7 @@ func TestRefreshTokenConsentURL(t *testing.T) {
 func TestRefreshTokenReturnsTheRefreshToken(t *testing.T) {
 	srv, calls := fakeTokenServer(t, "the-refresh-token")
 	cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
-	show := browser(t, func(q url.Values) url.Values {
+	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
 	got, err := RefreshToken(context.Background(), cfg, listen(t), show)
@@ -188,7 +196,7 @@ func TestRefreshTokenFailsOnABadRedirect(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv, calls := fakeTokenServer(t, "the-refresh-token")
 			cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
-			got, err := RefreshToken(context.Background(), cfg, listen(t), browser(t, query))
+			got, err := RefreshToken(context.Background(), cfg, listen(t), browser(t, http.StatusBadRequest, query))
 			if err == nil || got != "" {
 				t.Errorf("token = %q, err = %v", got, err)
 			}
@@ -202,7 +210,7 @@ func TestRefreshTokenFailsOnABadRedirect(t *testing.T) {
 func TestRefreshTokenFailsWithoutARefreshToken(t *testing.T) {
 	srv, _ := fakeTokenServer(t, "")
 	cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
-	show := browser(t, func(q url.Values) url.Values {
+	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
 	if _, err := RefreshToken(context.Background(), cfg, listen(t), show); err == nil {

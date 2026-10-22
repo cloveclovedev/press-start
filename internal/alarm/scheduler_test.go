@@ -369,3 +369,74 @@ func TestSchedulerRecordsPlayEnd(t *testing.T) {
 		})
 	}
 }
+
+func TestSchedulerStartsForWakeTimeMovedIntoPast(t *testing.T) {
+	// 2026-12-16 is a Wednesday without a weekday setting.
+	withDate := func(a settings.Alarm, day, hour, minute int) settings.Alarm {
+		a.Dates = map[settings.Date]settings.AlarmSetting{
+			{Year: 2026, Month: time.December, Day: day}: {On: true, Hour: hour, Minute: minute},
+		}
+		return a
+	}
+	tests := []struct {
+		name     string
+		start    time.Time
+		changeAt time.Time
+		before   settings.Alarm
+		after    settings.Alarm
+	}{
+		{"setting moved earlier", at(14, 5, 0, 0), at(14, 6, 40, 0), alarmAt(7, 0), alarmAt(6, 30)},
+		{"date setting added", at(16, 5, 0, 0), at(16, 8, 0, 0), testAlarm(), withDate(testAlarm(), 16, 7, 0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := runScheduler(t, tt.start, tt.changeAt.Add(2*time.Hour), func(now time.Time) settings.Alarm {
+				if now.Before(tt.changeAt) {
+					return tt.before
+				}
+				return tt.after
+			}, nil)
+			plays := f.player.plays()
+			if len(plays) != 1 {
+				t.Fatalf("Play calls = %d, want 1: %+v", len(plays), plays)
+			}
+			checkStart(t, plays[0].at, tt.changeAt)
+		})
+	}
+}
+
+func TestSchedulerSilentForWakeTimeBeforeStart(t *testing.T) {
+	// The service starts at 07:00 after the wake time of 06:30. A later
+	// change to 06:45 is also before the start. The next day rings.
+	f := runScheduler(t, at(14, 7, 0, 0), at(15, 9, 0, 0), func(now time.Time) settings.Alarm {
+		if now.Before(at(14, 8, 0, 0)) {
+			return alarmAt(6, 30)
+		}
+		return alarmAt(6, 45)
+	}, nil)
+	plays := f.player.plays()
+	if len(plays) != 1 {
+		t.Fatalf("Play calls = %d, want 1: %+v", len(plays), plays)
+	}
+	checkStart(t, plays[0].at, at(15, 6, 45, 0))
+}
+
+func TestSchedulerStartsOnceAfterWakeTimeChanges(t *testing.T) {
+	// After the run at 06:30, the wake time moves to a passed time, then to
+	// a future time. Neither starts the run again.
+	f := runScheduler(t, at(14, 5, 0, 0), at(14, 10, 0, 0), func(now time.Time) settings.Alarm {
+		switch {
+		case now.Before(at(14, 7, 0, 0)):
+			return alarmAt(6, 30)
+		case now.Before(at(14, 7, 30, 0)):
+			return alarmAt(6, 50)
+		default:
+			return alarmAt(7, 40)
+		}
+	}, nil)
+	plays := f.player.plays()
+	if len(plays) != 1 {
+		t.Fatalf("Play calls = %d, want 1: %+v", len(plays), plays)
+	}
+	checkStart(t, plays[0].at, at(14, 6, 30, 0))
+}

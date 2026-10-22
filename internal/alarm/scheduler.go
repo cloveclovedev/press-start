@@ -12,10 +12,6 @@ import (
 // CheckInterval is how often the scheduler decides the wake time.
 const CheckInterval = 15 * time.Second
 
-// StartWindow is how long after the wake time the wake-up run may still
-// start.
-const StartWindow = time.Minute
-
 // Clock tells the time and waits. Tests replace it so that they take no real
 // time.
 type Clock interface {
@@ -52,6 +48,10 @@ type Scheduler struct {
 	// Location is the time zone of the wake time.
 	Location *time.Location
 
+	// started is the time when Run started. A wake time before it stays
+	// silent, because after a restart nothing tells whether the run of that
+	// date already started.
+	started    time.Time
 	decided    bool
 	lastDate   settings.Date
 	lastWake   time.Time
@@ -62,9 +62,13 @@ type Scheduler struct {
 
 // Run decides the wake time every CheckInterval until ctx ends. It reads the
 // settings at each decision, so a changed file is used without a restart. It
-// starts the wake-up run once for each date, within StartWindow of the wake
-// time. A day without a wake time has no wake-up run. Run returns ctx.Err().
+// starts the wake-up run once for each date, at the first decision on or
+// after the wake time. A wake time that moves earlier into the past still
+// starts the run, so that a late change still wakes the user. A wake time
+// before the start of Run never starts the run. A day without a wake time has
+// no wake-up run. Run returns ctx.Err().
 func (s *Scheduler) Run(ctx context.Context) error {
+	s.started = s.Clock.Now()
 	for {
 		s.check(ctx)
 		select {
@@ -91,7 +95,7 @@ func (s *Scheduler) check(ctx context.Context) {
 		s.record(ctx, slog.LevelInfo, "wake time decided", "date", date.String(), "wake_time", wakeAttr)
 	}
 
-	if !ok || now.Before(wake) || now.Sub(wake) >= StartWindow {
+	if !ok || now.Before(wake) || wake.Before(s.started) {
 		return
 	}
 	if s.ran && s.ranDate == date {

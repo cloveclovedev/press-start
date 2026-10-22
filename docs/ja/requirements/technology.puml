@@ -7,6 +7,7 @@ cloud "External services" {
   [Google Calendar API] as gcal
   [Withings API] as withings
   [Claude API] as claude
+  [Healthchecks.io] as hc
 }
 cloud "Cloudflare" {
   [Relay (Workers)] as relay
@@ -25,6 +26,7 @@ relay --> d1
 app --> gcal : read events
 app --> relay : fetch notifications
 app --> claude : write scripts
+app --> hc : success and failure
 app --> db
 app --> tts : speech
 app --> audio

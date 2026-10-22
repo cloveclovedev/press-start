@@ -22,6 +22,9 @@ saturday = "08:05"
 [alarm.dates]
 "2026-12-24" = "05:45"
 2026-12-25 = "none"
+
+[calendar]
+lead_time = "25m"
 `
 
 func TestParseValid(t *testing.T) {
@@ -38,6 +41,9 @@ func TestParseValid(t *testing.T) {
 	}
 	if a.Volume != 70 {
 		t.Errorf("Volume = %d, want 70", a.Volume)
+	}
+	if s.Calendar.LeadTime != 25*time.Minute {
+		t.Errorf("LeadTime = %v, want 25m0s", s.Calendar.LeadTime)
 	}
 
 	wantWeekdays := [7]AlarmSetting{
@@ -70,6 +76,9 @@ func TestParseDefaultLength(t *testing.T) {
 	}
 	if s.Alarm.Length != 3*time.Minute {
 		t.Errorf("Length = %v, want 3m0s", s.Alarm.Length)
+	}
+	if s.Calendar.LeadTime != 10*time.Minute {
+		t.Errorf("LeadTime = %v, want 10m0s", s.Calendar.LeadTime)
 	}
 	if s.Alarm.Weekdays != [7]AlarmSetting{} {
 		t.Errorf("Weekdays = %+v, want all off", s.Alarm.Weekdays)
@@ -107,6 +116,10 @@ func TestParseInvalid(t *testing.T) {
 		{"zero length", base + "length = \"0s\"\n", "alarm.length"},
 		{"negative length", base + "length = \"-1m\"\n", "alarm.length"},
 		{"bad length", base + "length = \"three\"\n", "alarm.length"},
+		{"zero lead time", base + "[calendar]\nlead_time = \"0s\"\n", "calendar.lead_time"},
+		{"negative lead time", base + "[calendar]\nlead_time = \"-5m\"\n", "calendar.lead_time"},
+		{"bad lead time", base + "[calendar]\nlead_time = \"ten\"\n", "calendar.lead_time"},
+		{"unknown calendar key", base + "[calendar]\ncalendars = []\n", "calendar.calendars"},
 		{"missing volume", "[alarm]\nsound_file = \"a.mp3\"\n", "alarm.volume"},
 		{"volume too high", "[alarm]\nsound_file = \"a.mp3\"\nvolume = 101\n", "alarm.volume"},
 		{"volume too low", "[alarm]\nsound_file = \"a.mp3\"\nvolume = -1\n", "alarm.volume"},

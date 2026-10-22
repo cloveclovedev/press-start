@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mkuri/press-start/internal/core/calendar"
 	"github.com/mkuri/press-start/internal/core/settings"
 )
 
@@ -33,6 +34,11 @@ type SettingsSource interface {
 	Current() settings.Settings
 }
 
+// EventSource gives the calendar events that the scheduler last knows.
+type EventSource interface {
+	Events() []calendar.Event
+}
+
 // Player sets the speaker volume and plays the alarm sound.
 type Player interface {
 	SetVolume(ctx context.Context, percent int) error
@@ -43,8 +49,10 @@ type Player interface {
 type Scheduler struct {
 	Clock    Clock
 	Settings SettingsSource
-	Player   Player
-	Logger   *slog.Logger
+	// Events gives the calendar events. Nil means no events.
+	Events EventSource
+	Player Player
+	Logger *slog.Logger
 	// Location is the time zone of the wake time.
 	Location *time.Location
 
@@ -55,13 +63,13 @@ type Scheduler struct {
 	decided    bool
 	lastDate   settings.Date
 	lastWake   time.Time
-	lastWakeOK bool
+	lastReason Reason
 	ranDate    settings.Date
 	ran        bool
 }
 
 // Run decides the wake time every CheckInterval until ctx ends. It reads the
-// settings at each decision, so a changed file is used without a restart. It
+// settings and the events at each decision, so a changed file is used without a restart. It
 // starts the wake-up run once for each date, at the first decision on or
 // after the wake time. A wake time that moves earlier into the past still
 // starts the run, so that a late change still wakes the user. A wake time
@@ -83,16 +91,22 @@ func (s *Scheduler) check(ctx context.Context) {
 	now := s.Clock.Now().In(s.Location)
 	y, m, d := now.Date()
 	date := settings.Date{Year: y, Month: m, Day: d}
-	a := s.Settings.Current().Alarm
-	wake, ok := WakeTime(date, s.Location, a)
+	current := s.Settings.Current()
+	a := current.Alarm
+	var events []calendar.Event
+	if s.Events != nil {
+		events = s.Events.Events()
+	}
+	wake, reason := WakeTime(date, s.Location, a, events, current.Calendar.LeadTime, now)
+	ok := reason != ReasonNone
 
-	if !s.decided || date != s.lastDate || ok != s.lastWakeOK || !wake.Equal(s.lastWake) {
-		s.decided, s.lastDate, s.lastWake, s.lastWakeOK = true, date, wake, ok
+	if !s.decided || date != s.lastDate || reason != s.lastReason || !wake.Equal(s.lastWake) {
+		s.decided, s.lastDate, s.lastWake, s.lastReason = true, date, wake, reason
 		wakeAttr := "none"
 		if ok {
 			wakeAttr = wake.Format(time.RFC3339)
 		}
-		s.record(ctx, slog.LevelInfo, "wake time decided", "date", date.String(), "wake_time", wakeAttr)
+		s.record(ctx, slog.LevelInfo, "wake time decided", "date", date.String(), "wake_time", wakeAttr, "reason", string(reason))
 	}
 
 	if !ok || now.Before(wake) || wake.Before(s.started) {

@@ -1,7 +1,7 @@
 // Package settings reads the settings file of press-start into checked values.
 //
 // The settings file is one TOML file. It holds an alarm setting for each
-// weekday and for single dates.
+// weekday and for single dates, and how the calendar events are used.
 package settings
 
 import (
@@ -18,9 +18,20 @@ import (
 // DefaultLength is the length of the alarm sound when the file sets none.
 const DefaultLength = 3 * time.Minute
 
+// DefaultLeadTime is the lead time when the file sets none.
+const DefaultLeadTime = 10 * time.Minute
+
 // Settings holds the checked contents of the settings file.
 type Settings struct {
-	Alarm Alarm
+	Alarm    Alarm
+	Calendar Calendar
+}
+
+// Calendar holds how the calendar events decide the wake time.
+type Calendar struct {
+	// LeadTime is how long before the start of the first event the user
+	// wakes.
+	LeadTime time.Duration
 }
 
 // Alarm holds the alarm settings and how the alarm sound plays.
@@ -60,7 +71,12 @@ func (d Date) String() string {
 }
 
 type fileSettings struct {
-	Alarm fileAlarm `toml:"alarm"`
+	Alarm    fileAlarm    `toml:"alarm"`
+	Calendar fileCalendar `toml:"calendar"`
+}
+
+type fileCalendar struct {
+	LeadTime *string `toml:"lead_time"`
 }
 
 type fileAlarm struct {
@@ -169,7 +185,19 @@ func Parse(data []byte) (Settings, error) {
 		a.Dates[Date{Year: t.Year(), Month: t.Month(), Day: t.Day()}] = setting
 	}
 
-	return Settings{Alarm: a}, nil
+	c := Calendar{LeadTime: DefaultLeadTime}
+	if f.Calendar.LeadTime != nil {
+		d, err := time.ParseDuration(*f.Calendar.LeadTime)
+		if err != nil {
+			return Settings{}, fmt.Errorf("calendar.lead_time: %w", err)
+		}
+		if d <= 0 {
+			return Settings{}, fmt.Errorf("calendar.lead_time: %s is not more than 0", d)
+		}
+		c.LeadTime = d
+	}
+
+	return Settings{Alarm: a, Calendar: c}, nil
 }
 
 // parseAlarmSetting reads "HH:MM" or "none".

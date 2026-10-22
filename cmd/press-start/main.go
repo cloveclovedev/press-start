@@ -154,17 +154,13 @@ func runAuthWith(ctx context.Context, args []string, stdout, stderr io.Writer, s
 		fs.Usage()
 		return errors.New("usage: press-start auth -client <path>")
 	}
-	cfg, err := google.LoadConfig(*client)
-	if err != nil {
-		return err
-	}
 	// Port 0 takes a free port. Google accepts any port on 127.0.0.1 for a
 	// client of the type "Desktop app".
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen on 127.0.0.1: %w", err)
 	}
-	token, err := google.RefreshToken(ctx, cfg, ln, showURL)
+	token, err := google.RefreshToken(ctx, *client, ln, showURL)
 	if err != nil {
 		return err
 	}

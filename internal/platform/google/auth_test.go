@@ -93,7 +93,7 @@ func browser(t *testing.T, wantStatus int, query func(consent url.Values) url.Va
 }
 
 func TestConfigFromJSONAsksForTheCalendarScopeOnly(t *testing.T) {
-	cfg, err := ConfigFromJSON([]byte(clientJSON("https://oauth2.example/token")))
+	cfg, err := configFromJSON([]byte(clientJSON("https://oauth2.example/token")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestConfigFromJSONRejectsOtherClientTypes(t *testing.T) {
 		"not JSON":   `client`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ConfigFromJSON([]byte(data)); err == nil {
+			if _, err := configFromJSON([]byte(data)); err == nil {
 				t.Error("err = nil")
 			}
 		})
@@ -124,17 +124,38 @@ func TestLoadConfigReadsTheFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(clientJSON("https://oauth2.example/token")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadConfig(path); err != nil {
+	if _, err := loadConfig(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadConfig(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+	if _, err := loadConfig(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Error("missing file: err = nil")
+	}
+}
+
+func TestRefreshTokenReadsTheClientFile(t *testing.T) {
+	srv, _ := fakeTokenServer(t, "the-refresh-token")
+	path := filepath.Join(t.TempDir(), "client.json")
+	if err := os.WriteFile(path, []byte(clientJSON(srv.URL)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
+		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
+	})
+	if got, err := RefreshToken(context.Background(), path, listen(t), show); err != nil || got != "the-refresh-token" {
+		t.Errorf("token = %q, err = %v", got, err)
+	}
+	ln := listen(t)
+	if _, err := RefreshToken(context.Background(), filepath.Join(t.TempDir(), "missing.json"), ln, func(string) {}); err == nil {
+		t.Error("missing file: err = nil")
+	}
+	if _, err := ln.Accept(); err == nil {
+		t.Error("missing file: the listener is still open")
 	}
 }
 
 func TestRefreshTokenConsentURL(t *testing.T) {
 	srv, _ := fakeTokenServer(t, "the-refresh-token")
-	cfg, err := ConfigFromJSON([]byte(clientJSON(srv.URL)))
+	cfg, err := configFromJSON([]byte(clientJSON(srv.URL)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +164,7 @@ func TestRefreshTokenConsentURL(t *testing.T) {
 		consent = q
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
-	if _, err := RefreshToken(context.Background(), cfg, listen(t), show); err != nil {
+	if _, err := refreshToken(context.Background(), cfg, listen(t), show); err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]string{
@@ -168,11 +189,11 @@ func TestRefreshTokenConsentURL(t *testing.T) {
 
 func TestRefreshTokenReturnsTheRefreshToken(t *testing.T) {
 	srv, calls := fakeTokenServer(t, "the-refresh-token")
-	cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
+	cfg, _ := configFromJSON([]byte(clientJSON(srv.URL)))
 	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
-	got, err := RefreshToken(context.Background(), cfg, listen(t), show)
+	got, err := refreshToken(context.Background(), cfg, listen(t), show)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,8 +216,8 @@ func TestRefreshTokenFailsOnABadRedirect(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv, calls := fakeTokenServer(t, "the-refresh-token")
-			cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
-			got, err := RefreshToken(context.Background(), cfg, listen(t), browser(t, http.StatusBadRequest, query))
+			cfg, _ := configFromJSON([]byte(clientJSON(srv.URL)))
+			got, err := refreshToken(context.Background(), cfg, listen(t), browser(t, http.StatusBadRequest, query))
 			if err == nil || got != "" {
 				t.Errorf("token = %q, err = %v", got, err)
 			}
@@ -209,20 +230,20 @@ func TestRefreshTokenFailsOnABadRedirect(t *testing.T) {
 
 func TestRefreshTokenFailsWithoutARefreshToken(t *testing.T) {
 	srv, _ := fakeTokenServer(t, "")
-	cfg, _ := ConfigFromJSON([]byte(clientJSON(srv.URL)))
+	cfg, _ := configFromJSON([]byte(clientJSON(srv.URL)))
 	show := browser(t, http.StatusOK, func(q url.Values) url.Values {
 		return url.Values{"state": {q.Get("state")}, "code": {"the-code"}}
 	})
-	if _, err := RefreshToken(context.Background(), cfg, listen(t), show); err == nil {
+	if _, err := refreshToken(context.Background(), cfg, listen(t), show); err == nil {
 		t.Error("err = nil")
 	}
 }
 
 func TestRefreshTokenStopsWithTheContext(t *testing.T) {
-	cfg, _ := ConfigFromJSON([]byte(clientJSON("https://oauth2.example/token")))
+	cfg, _ := configFromJSON([]byte(clientJSON("https://oauth2.example/token")))
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := RefreshToken(ctx, cfg, listen(t), func(string) {}); err == nil {
+	if _, err := refreshToken(ctx, cfg, listen(t), func(string) {}); err == nil {
 		t.Error("err = nil")
 	}
 }

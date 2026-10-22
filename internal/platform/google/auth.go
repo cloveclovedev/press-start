@@ -36,18 +36,18 @@ type clientFile struct {
 	} `json:"installed"`
 }
 
-// LoadConfig reads the OAuth client JSON file at path. The client must be of
+// loadConfig reads the OAuth client JSON file at path. The client must be of
 // the type "Desktop app". The config asks for CalendarScope only.
-func LoadConfig(path string) (*oauth2.Config, error) {
+func loadConfig(path string) (*oauth2.Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read OAuth client: %w", err)
 	}
-	return ConfigFromJSON(data)
+	return configFromJSON(data)
 }
 
-// ConfigFromJSON is LoadConfig for the content of the file.
-func ConfigFromJSON(data []byte) (*oauth2.Config, error) {
+// configFromJSON is loadConfig for the content of the file.
+func configFromJSON(data []byte) (*oauth2.Config, error) {
 	var f clientFile
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse OAuth client: %w", err)
@@ -78,11 +78,25 @@ type callback struct {
 	err  error
 }
 
-// RefreshToken runs the loopback flow on ln, which must listen on 127.0.0.1.
-// It gives the consent URL to showURL, waits for the redirect of the browser,
-// and exchanges the code for a token. It returns the refresh token, and
-// writes nothing to a file. It returns an error when ctx ends first.
-func RefreshToken(ctx context.Context, cfg *oauth2.Config, ln net.Listener, showURL func(string)) (string, error) {
+// RefreshToken reads the OAuth client JSON file at clientFile and runs the
+// loopback flow on ln, which must listen on 127.0.0.1. It gives the consent
+// URL to showURL, waits for the redirect of the browser, and exchanges the
+// code for a token. It returns the refresh token, and writes nothing to a
+// file. It returns an error when ctx ends first.
+//
+// The OAuth client stays inside this package, so that the types of
+// golang.org/x/oauth2 do not reach the callers.
+func RefreshToken(ctx context.Context, clientFile string, ln net.Listener, showURL func(string)) (string, error) {
+	cfg, err := loadConfig(clientFile)
+	if err != nil {
+		ln.Close()
+		return "", err
+	}
+	return refreshToken(ctx, cfg, ln, showURL)
+}
+
+// refreshToken is RefreshToken for a loaded OAuth client.
+func refreshToken(ctx context.Context, cfg *oauth2.Config, ln net.Listener, showURL func(string)) (string, error) {
 	// The state ties the redirect to this run.
 	state := rand.Text()
 	verifier := oauth2.GenerateVerifier()

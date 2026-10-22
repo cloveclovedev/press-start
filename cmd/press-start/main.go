@@ -1,14 +1,19 @@
 // Command press-start is the service of the home server. It takes every value
 // of the home server from environment variables, and records as JSON lines on
 // standard output.
+//
+// "press-start auth -client <path>" gets the Google refresh token once, on a
+// computer with a browser, and prints it to standard output.
 package main
 
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,6 +26,7 @@ import (
 	"github.com/mkuri/press-start/internal/alarm"
 	"github.com/mkuri/press-start/internal/core/settings"
 	"github.com/mkuri/press-start/internal/platform/alsa"
+	"github.com/mkuri/press-start/internal/platform/google"
 )
 
 // The environment variables of the service. All are required.
@@ -38,6 +44,14 @@ const (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "auth" {
+		if err := runAuth(ctx, os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "press-start auth:", err)
+			stop()
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx, os.Getenv, os.Stdout); err != nil {
 		slog.New(slog.NewJSONHandler(os.Stdout, nil)).Error("press-start stopped", "error", err)
 		stop()
@@ -115,4 +129,42 @@ func readConfig(getenv func(string) string) (config, error) {
 	}
 	cfg.location = loc
 	return cfg, nil
+}
+
+// runAuth runs the subcommand auth. It prints the consent URL to stderr and
+// the refresh token once to stdout. It writes the token to no file: the
+// Maintainer stores it in the secret manager.
+func runAuth(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	return runAuthWith(ctx, args, stdout, stderr, func(u string) {
+		fmt.Fprintf(stderr, "Open this URL in a browser and give consent:\n\n%s\n\n", u)
+	})
+}
+
+func runAuthWith(ctx context.Context, args []string, stdout, stderr io.Writer, showURL func(string)) error {
+	fs := flag.NewFlagSet("auth", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	client := fs.String("client", "", `path of the OAuth client JSON file (type "Desktop app")`)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *client == "" || fs.NArg() > 0 {
+		fs.Usage()
+		return errors.New("usage: press-start auth -client <path>")
+	}
+	cfg, err := google.LoadConfig(*client)
+	if err != nil {
+		return err
+	}
+	// Port 0 takes a free port. Google accepts any port on 127.0.0.1 for a
+	// client of the type "Desktop app".
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return fmt.Errorf("listen on 127.0.0.1: %w", err)
+	}
+	token, err := google.RefreshToken(ctx, cfg, ln, showURL)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(stdout, token)
+	return err
 }

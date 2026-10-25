@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -223,7 +224,9 @@ func Parse(data []byte) (Settings, error) {
 			return Settings{}, fmt.Errorf("calendar.calendars[%d]: empty calendar ID", i)
 		}
 	}
-	c.Calendars = f.Calendar.Calendars
+	// A copy, so that a caller that changes its list leaves the settings as
+	// they are.
+	c.Calendars = slices.Clone(f.Calendar.Calendars)
 
 	return Settings{Alarm: a, Calendar: c}, nil
 }

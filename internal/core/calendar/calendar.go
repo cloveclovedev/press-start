@@ -4,8 +4,14 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrTokenExpired tells that the calendar refuses the credentials, so the
+// user must authorize press-start again. A quick retry does not help, so a
+// Source wraps this error for such a failure.
+var ErrTokenExpired = errors.New("calendar: token expired or revoked")
 
 // Event is one calendar event.
 type Event struct {
@@ -22,6 +28,8 @@ type Event struct {
 
 // Source reads the events from a calendar. A calendar adapter implements it.
 type Source interface {
-	// Events returns the events that start from from until before to.
-	Events(ctx context.Context, from, to time.Time) ([]Event, error)
+	// Events returns the events of the calendars with the IDs in calendars
+	// that start from from until before to. An empty calendars means the
+	// main calendar of the user.
+	Events(ctx context.Context, calendars []string, from, to time.Time) ([]Event, error)
 }

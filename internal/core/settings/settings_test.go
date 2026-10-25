@@ -25,6 +25,8 @@ saturday = "08:05"
 
 [calendar]
 lead_time = "25m"
+read_interval = "5m"
+calendars = ["primary", "team@example.com"]
 `
 
 func TestParseValid(t *testing.T) {
@@ -44,6 +46,12 @@ func TestParseValid(t *testing.T) {
 	}
 	if s.Calendar.LeadTime != 25*time.Minute {
 		t.Errorf("LeadTime = %v, want 25m0s", s.Calendar.LeadTime)
+	}
+	if s.Calendar.ReadInterval != 5*time.Minute {
+		t.Errorf("ReadInterval = %v, want 5m0s", s.Calendar.ReadInterval)
+	}
+	if got := s.Calendar.Calendars; len(got) != 2 || got[0] != "primary" || got[1] != "team@example.com" {
+		t.Errorf("Calendars = %q, want [primary team@example.com]", got)
 	}
 
 	wantWeekdays := [7]AlarmSetting{
@@ -79,6 +87,12 @@ func TestParseDefaultLength(t *testing.T) {
 	}
 	if s.Calendar.LeadTime != 10*time.Minute {
 		t.Errorf("LeadTime = %v, want 10m0s", s.Calendar.LeadTime)
+	}
+	if s.Calendar.ReadInterval != 15*time.Minute {
+		t.Errorf("ReadInterval = %v, want 15m0s", s.Calendar.ReadInterval)
+	}
+	if len(s.Calendar.Calendars) != 0 {
+		t.Errorf("Calendars = %q, want empty", s.Calendar.Calendars)
 	}
 	if s.Alarm.Weekdays != [7]AlarmSetting{} {
 		t.Errorf("Weekdays = %+v, want all off", s.Alarm.Weekdays)
@@ -119,7 +133,11 @@ func TestParseInvalid(t *testing.T) {
 		{"zero lead time", base + "[calendar]\nlead_time = \"0s\"\n", "calendar.lead_time"},
 		{"negative lead time", base + "[calendar]\nlead_time = \"-5m\"\n", "calendar.lead_time"},
 		{"bad lead time", base + "[calendar]\nlead_time = \"ten\"\n", "calendar.lead_time"},
-		{"unknown calendar key", base + "[calendar]\ncalendars = []\n", "calendar.calendars"},
+		{"zero read interval", base + "[calendar]\nread_interval = \"0s\"\n", "calendar.read_interval"},
+		{"bad read interval", base + "[calendar]\nread_interval = \"often\"\n", "calendar.read_interval"},
+		{"empty calendar ID", base + "[calendar]\ncalendars = [\"primary\", \"\"]\n", "calendar.calendars[1]"},
+		{"calendars not a list", base + "[calendar]\ncalendars = \"primary\"\n", "calendars"},
+		{"unknown calendar key", base + "[calendar]\nlead = \"5m\"\n", "calendar.lead"},
 		{"missing volume", "[alarm]\nsound_file = \"a.mp3\"\n", "alarm.volume"},
 		{"volume too high", "[alarm]\nsound_file = \"a.mp3\"\nvolume = 101\n", "alarm.volume"},
 		{"volume too low", "[alarm]\nsound_file = \"a.mp3\"\nvolume = -1\n", "alarm.volume"},

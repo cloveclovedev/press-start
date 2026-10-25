@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mkuri/press-start/internal/core/calendar"
 	"github.com/mkuri/press-start/internal/core/settings"
 	"github.com/mkuri/press-start/internal/platform/alsa"
 )
@@ -88,6 +89,11 @@ func (p *fakePlayer) plays() []playerCall {
 	return plays
 }
 
+// eventsFunc gives the events for the time of the fake clock.
+type eventsFunc func() []calendar.Event
+
+func (f eventsFunc) Events() []calendar.Event { return f() }
+
 // sourceFunc gives the settings for the time of the fake clock.
 type sourceFunc func() settings.Settings
 
@@ -109,6 +115,15 @@ func runScheduler(t *testing.T, start, end time.Time, current func(now time.Time
 // of the player.
 func runSchedulerWith(t *testing.T, start, end time.Time, current func(now time.Time) settings.Alarm, player *fakePlayer) *schedulerFixture {
 	t.Helper()
+	return runSchedulerEvents(t, start, end, func(now time.Time) settings.Settings {
+		return settings.Settings{Alarm: current(now)}
+	}, nil, player)
+}
+
+// runSchedulerEvents is runSchedulerWith with the whole settings and a source
+// of events.
+func runSchedulerEvents(t *testing.T, start, end time.Time, current func(now time.Time) settings.Settings, events EventSource, player *fakePlayer) *schedulerFixture {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := &schedulerFixture{clock: &fakeClock{now: start, end: end, cancel: cancel}}
@@ -117,8 +132,9 @@ func runSchedulerWith(t *testing.T, start, end time.Time, current func(now time.
 	s := &Scheduler{
 		Clock: f.clock,
 		Settings: sourceFunc(func() settings.Settings {
-			return settings.Settings{Alarm: current(f.clock.now)}
+			return current(f.clock.now)
 		}),
+		Events:   events,
 		Player:   f.player,
 		Logger:   slog.New(slog.NewJSONHandler(&f.log, nil)),
 		Location: tokyo,
@@ -213,8 +229,8 @@ func TestSchedulerNoAlarmNeverPlays(t *testing.T) {
 		t.Fatalf("wake time decided = %+v, want 2026-12-14 and 2026-12-15", decided)
 	}
 	for _, l := range decided {
-		if l.WakeTime != "none" {
-			t.Errorf("%s: wake_time = %q, want none", l.Date, l.WakeTime)
+		if l.WakeTime != "none" || l.Reason != "none" {
+			t.Errorf("%s: wake_time = %q, reason = %q, want none and none", l.Date, l.WakeTime, l.Reason)
 		}
 	}
 }
@@ -311,7 +327,7 @@ func TestSchedulerRecordsEventsInOrder(t *testing.T) {
 	}, nil)
 	playAt := f.player.plays()[0].at
 	want := []logLine{
-		{Time: start, Msg: "wake time decided", Date: "2026-12-14", WakeTime: at(14, 6, 30, 0).Format(time.RFC3339)},
+		{Time: start, Msg: "wake time decided", Date: "2026-12-14", WakeTime: at(14, 6, 30, 0).Format(time.RFC3339), Reason: "alarm setting"},
 		{Time: playAt, Msg: "alarm sound started", Date: "2026-12-14"},
 		{Time: playAt.Add(3 * time.Minute), Msg: "alarm sound ended", Date: "2026-12-14"},
 	}
@@ -321,7 +337,7 @@ func TestSchedulerRecordsEventsInOrder(t *testing.T) {
 	}
 	for i := range want {
 		g, w := got[i], want[i]
-		if g.Msg != w.Msg || g.Date != w.Date || g.WakeTime != w.WakeTime || !g.Time.Equal(w.Time) {
+		if g.Msg != w.Msg || g.Date != w.Date || g.WakeTime != w.WakeTime || g.Reason != w.Reason || !g.Time.Equal(w.Time) {
 			t.Errorf("log line %d = %+v, want %+v", i, g, w)
 		}
 	}
@@ -439,4 +455,61 @@ func TestSchedulerStartsOnceAfterWakeTimeChanges(t *testing.T) {
 		t.Fatalf("Play calls = %d, want 1: %+v", len(plays), plays)
 	}
 	checkStart(t, plays[0].at, at(14, 6, 30, 0))
+}
+
+func TestSchedulerWakesForFirstEvent(t *testing.T) {
+	// The event is found at 07:30, after the alarm setting of 08:00 was
+	// decided. The wake time moves to 07:20 and records its reason.
+	foundAt := at(14, 7, 30, 0)
+	player := &fakePlayer{}
+	events := eventsFunc(func() []calendar.Event {
+		if player.clock.now.Before(foundAt) {
+			return nil
+		}
+		return []calendar.Event{{Start: at(14, 7, 50, 0)}}
+	})
+	f := runSchedulerEvents(t, at(14, 7, 0, 0), at(14, 8, 30, 0), func(time.Time) settings.Settings {
+		return settings.Settings{Alarm: alarmAt(8, 0), Calendar: settings.Calendar{LeadTime: 30 * time.Minute}}
+	}, events, player)
+	plays := f.player.plays()
+	if len(plays) != 1 {
+		t.Fatalf("Play calls = %d, want 1: %+v", len(plays), plays)
+	}
+	checkStart(t, plays[0].at, foundAt)
+	var decided []logLine
+	for _, l := range f.lines(t) {
+		if l.Msg == "wake time decided" {
+			decided = append(decided, l)
+		}
+	}
+	want := []logLine{
+		{WakeTime: at(14, 8, 0, 0).Format(time.RFC3339), Reason: "alarm setting"},
+		{WakeTime: at(14, 7, 20, 0).Format(time.RFC3339), Reason: "first event"},
+	}
+	if len(decided) != len(want) {
+		t.Fatalf("wake time decided = %+v, want %d lines", decided, len(want))
+	}
+	for i := range want {
+		if decided[i].WakeTime != want[i].WakeTime || decided[i].Reason != want[i].Reason {
+			t.Errorf("wake time decided %d = %+v, want %+v", i, decided[i], want[i])
+		}
+	}
+}
+
+func TestSchedulerNoCountedEventAndNoAlarmNeverPlays(t *testing.T) {
+	// 2026-12-16 is a Wednesday without an alarm setting.
+	events := eventsFunc(func() []calendar.Event {
+		return []calendar.Event{
+			{Start: at(16, 0, 0, 0), AllDay: true},
+			{Start: at(16, 8, 0, 0), Declined: true},
+			{Start: at(16, 9, 0, 0), Free: true},
+			{Start: at(16, 2, 0, 0)},
+		}
+	})
+	f := runSchedulerEvents(t, at(16, 0, 30, 0), at(16, 12, 0, 0), func(time.Time) settings.Settings {
+		return settings.Settings{Alarm: testAlarm(), Calendar: settings.Calendar{LeadTime: 10 * time.Minute}}
+	}, events, &fakePlayer{})
+	if len(f.player.calls) != 0 {
+		t.Fatalf("player calls = %+v, want none", f.player.calls)
+	}
 }

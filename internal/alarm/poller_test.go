@@ -252,3 +252,61 @@ func TestPollerUsesChangedReadInterval(t *testing.T) {
 		t.Errorf("reads at %v, want %v", got, want)
 	}
 }
+
+// stuckOnceSource does not answer the first read until the read is stopped.
+// It answers every later read.
+type stuckOnceSource struct {
+	clock *fakeClock
+	calls []time.Time
+}
+
+func (s *stuckOnceSource) Events(ctx context.Context, _ []string, _, _ time.Time) ([]calendar.Event, error) {
+	s.calls = append(s.calls, s.clock.now)
+	if len(s.calls) == 1 {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return []calendar.Event{{Start: at(14, 7, 0, 0)}}, nil
+}
+
+func TestPollerStopsStuckRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	start := at(14, 5, 0, 0)
+	// The read timeout runs on real time, so the interval is short.
+	interval := 20 * time.Millisecond
+	clock := &fakeClock{now: start, end: start.Add(30 * time.Millisecond), cancel: cancel}
+	src := &stuckOnceSource{clock: clock}
+	var log bytes.Buffer
+	p := &Poller{
+		Clock: clock,
+		Settings: sourceFunc(func() settings.Settings {
+			return settings.Settings{Calendar: settings.Calendar{ReadInterval: interval}}
+		}),
+		Source:   src,
+		Logger:   slog.New(slog.NewJSONHandler(&log, nil)),
+		Location: tokyo,
+	}
+	if err := p.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run = %v, want %v", err, context.Canceled)
+	}
+	want := []time.Time{start, start.Add(interval)}
+	if !slices.EqualFunc(src.calls, want, time.Time.Equal) {
+		t.Errorf("reads at %v, want %v", src.calls, want)
+	}
+	var lines []pollerLogLine
+	sc := bufio.NewScanner(&log)
+	for sc.Scan() {
+		var l pollerLogLine
+		if err := json.Unmarshal(sc.Bytes(), &l); err != nil {
+			t.Fatalf("log line %q: %v", sc.Text(), err)
+		}
+		lines = append(lines, l)
+	}
+	if len(lines) != 1 || lines[0].Msg != "calendar read failed" || lines[0].Error != context.DeadlineExceeded.Error() {
+		t.Errorf("log = %+v, want one calendar read failed with %q", lines, context.DeadlineExceeded)
+	}
+	if got := p.Events(); len(got) != 1 {
+		t.Errorf("Events = %+v, want the event of the second read", got)
+	}
+}

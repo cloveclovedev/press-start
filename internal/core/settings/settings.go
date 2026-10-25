@@ -21,6 +21,10 @@ const DefaultLength = 3 * time.Minute
 // DefaultLeadTime is the lead time when the file sets none.
 const DefaultLeadTime = 10 * time.Minute
 
+// DefaultReadInterval is how often the calendar is read when the file sets
+// none.
+const DefaultReadInterval = 15 * time.Minute
+
 // Settings holds the checked contents of the settings file.
 type Settings struct {
 	Alarm    Alarm
@@ -32,6 +36,12 @@ type Calendar struct {
 	// LeadTime is how long before the start of the first event the user
 	// wakes.
 	LeadTime time.Duration
+	// ReadInterval is how long the poller waits between two reads of the
+	// calendar.
+	ReadInterval time.Duration
+	// Calendars holds the IDs of the calendars to read. Empty means the main
+	// calendar of the user.
+	Calendars []string
 }
 
 // Alarm holds the alarm settings and how the alarm sound plays.
@@ -76,7 +86,9 @@ type fileSettings struct {
 }
 
 type fileCalendar struct {
-	LeadTime *string `toml:"lead_time"`
+	LeadTime     *string  `toml:"lead_time"`
+	ReadInterval *string  `toml:"read_interval"`
+	Calendars    []string `toml:"calendars"`
 }
 
 type fileAlarm struct {
@@ -185,7 +197,7 @@ func Parse(data []byte) (Settings, error) {
 		a.Dates[Date{Year: t.Year(), Month: t.Month(), Day: t.Day()}] = setting
 	}
 
-	c := Calendar{LeadTime: DefaultLeadTime}
+	c := Calendar{LeadTime: DefaultLeadTime, ReadInterval: DefaultReadInterval}
 	if f.Calendar.LeadTime != nil {
 		d, err := time.ParseDuration(*f.Calendar.LeadTime)
 		if err != nil {
@@ -196,6 +208,22 @@ func Parse(data []byte) (Settings, error) {
 		}
 		c.LeadTime = d
 	}
+	if f.Calendar.ReadInterval != nil {
+		d, err := time.ParseDuration(*f.Calendar.ReadInterval)
+		if err != nil {
+			return Settings{}, fmt.Errorf("calendar.read_interval: %w", err)
+		}
+		if d <= 0 {
+			return Settings{}, fmt.Errorf("calendar.read_interval: %s is not more than 0", d)
+		}
+		c.ReadInterval = d
+	}
+	for i, id := range f.Calendar.Calendars {
+		if id == "" {
+			return Settings{}, fmt.Errorf("calendar.calendars[%d]: empty calendar ID", i)
+		}
+	}
+	c.Calendars = f.Calendar.Calendars
 
 	return Settings{Alarm: a, Calendar: c}, nil
 }

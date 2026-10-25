@@ -25,6 +25,9 @@ saturday = "08:05"
 
 [calendar]
 lead_time = "25m"
+
+[monitor]
+interval = "90s"
 `
 
 func TestParseValid(t *testing.T) {
@@ -44,6 +47,9 @@ func TestParseValid(t *testing.T) {
 	}
 	if s.Calendar.LeadTime != 25*time.Minute {
 		t.Errorf("LeadTime = %v, want 25m0s", s.Calendar.LeadTime)
+	}
+	if s.Monitor.Interval != 90*time.Second {
+		t.Errorf("Monitor.Interval = %v, want 1m30s", s.Monitor.Interval)
 	}
 
 	wantWeekdays := [7]AlarmSetting{
@@ -79,6 +85,9 @@ func TestParseDefaultLength(t *testing.T) {
 	}
 	if s.Calendar.LeadTime != 10*time.Minute {
 		t.Errorf("LeadTime = %v, want 10m0s", s.Calendar.LeadTime)
+	}
+	if s.Monitor.Interval != 5*time.Minute {
+		t.Errorf("Monitor.Interval = %v, want 5m0s", s.Monitor.Interval)
 	}
 	if s.Alarm.Weekdays != [7]AlarmSetting{} {
 		t.Errorf("Weekdays = %+v, want all off", s.Alarm.Weekdays)
@@ -119,6 +128,11 @@ func TestParseInvalid(t *testing.T) {
 		{"zero lead time", base + "[calendar]\nlead_time = \"0s\"\n", "calendar.lead_time"},
 		{"negative lead time", base + "[calendar]\nlead_time = \"-5m\"\n", "calendar.lead_time"},
 		{"bad lead time", base + "[calendar]\nlead_time = \"ten\"\n", "calendar.lead_time"},
+		{"monitor interval at the gap", base + "[monitor]\ninterval = \"12s\"\n", "monitor.interval"},
+		{"monitor interval below the gap", base + "[monitor]\ninterval = \"5s\"\n", "monitor.interval"},
+		{"negative monitor interval", base + "[monitor]\ninterval = \"-5m\"\n", "monitor.interval"},
+		{"bad monitor interval", base + "[monitor]\ninterval = \"often\"\n", "monitor.interval"},
+		{"unknown monitor key", base + "[monitor]\nurl = \"x\"\n", "monitor.url"},
 		{"unknown calendar key", base + "[calendar]\ncalendars = []\n", "calendar.calendars"},
 		{"missing volume", "[alarm]\nsound_file = \"a.mp3\"\n", "alarm.volume"},
 		{"volume too high", "[alarm]\nsound_file = \"a.mp3\"\nvolume = 101\n", "alarm.volume"},

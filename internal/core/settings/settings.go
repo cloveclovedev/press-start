@@ -21,10 +21,26 @@ const DefaultLength = 3 * time.Minute
 // DefaultLeadTime is the lead time when the file sets none.
 const DefaultLeadTime = 10 * time.Minute
 
+// DefaultMonitorInterval is the interval of the regular monitor
+// notification when the file sets none.
+const DefaultMonitorInterval = 5 * time.Minute
+
+// MinMonitorGap is the shortest time between two monitor notifications. The
+// monitor service takes at most 5 notifications of one check per minute.
+const MinMonitorGap = 12 * time.Second
+
 // Settings holds the checked contents of the settings file.
 type Settings struct {
 	Alarm    Alarm
 	Calendar Calendar
+	Monitor  Monitor
+}
+
+// Monitor holds how press-start notifies the external monitor.
+type Monitor struct {
+	// Interval is the time between two regular notifications. It is more
+	// than MinMonitorGap.
+	Interval time.Duration
 }
 
 // Calendar holds how the calendar events decide the wake time.
@@ -73,6 +89,11 @@ func (d Date) String() string {
 type fileSettings struct {
 	Alarm    fileAlarm    `toml:"alarm"`
 	Calendar fileCalendar `toml:"calendar"`
+	Monitor  fileMonitor  `toml:"monitor"`
+}
+
+type fileMonitor struct {
+	Interval *string `toml:"interval"`
 }
 
 type fileCalendar struct {
@@ -197,7 +218,19 @@ func Parse(data []byte) (Settings, error) {
 		c.LeadTime = d
 	}
 
-	return Settings{Alarm: a, Calendar: c}, nil
+	mon := Monitor{Interval: DefaultMonitorInterval}
+	if f.Monitor.Interval != nil {
+		d, err := time.ParseDuration(*f.Monitor.Interval)
+		if err != nil {
+			return Settings{}, fmt.Errorf("monitor.interval: %w", err)
+		}
+		if d <= MinMonitorGap {
+			return Settings{}, fmt.Errorf("monitor.interval: %s is not more than %s", d, MinMonitorGap)
+		}
+		mon.Interval = d
+	}
+
+	return Settings{Alarm: a, Calendar: c, Monitor: mon}, nil
 }
 
 // parseAlarmSetting reads "HH:MM" or "none".
